@@ -1,0 +1,17 @@
+@OnlinesalesCC.Server_HostAddress = http://localhost:5010
+
+GET {{OnlinesalesCC.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+GET {{OnlinesalesCC.Server_HostAddress}}/api/tickets
+Accept: application/json
+
+
+###
+
+GET {{OnlinesalesCC.Server_HostAddress}}/api/products
+Accept: application/json
+
+###

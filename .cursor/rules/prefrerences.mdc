@@ -1,0 +1,122 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+Here's your document with the minor redundancies addressed:
+
+# Development Guidelines
+
+This document outlines our team's development standards and practices. It serves as both a reference guide for ongoing work and an onboarding resource for new team members. Refer to these guidelines during development, code reviews, and when making architectural decisions.
+
+## Coding Pattern Preferences:
+* Always prefer simple solutions that prioritize readability over cleverness
+* Avoid duplication of code whenever possible, which means checking for other areas of the codebase that might already have similar functionality
+* Write code that takes into account the different environments: dev, test, and prod
+* You are careful to only make changes that are requested or you are confident are well understood and related to the change being requested
+* When fixing an issue or bug, exhaust all options within the existing implementation before introducing a new pattern or technology. If you do introduce something new, remove the old implementation to avoid duplicate logic
+* Keep the codebase clean, organized, and maintainable with descriptive naming conventions
+* Avoid writing scripts in files if possible, especially if the script is likely only to be run once
+* Avoid having files over 250-350 lines of code. Refactor at that point to maintain readability and testability
+* Mocking data is only needed for tests, never mock data for dev or prod
+* Never add stubbing or fake data patterns to code that affects the dev or prod environments
+* Never overwrite my .env file without first asking and confirming
+* Keep the code, variables, functions etc. and even file names descriptive and self-explanatory
+
+## Version Control Best Practices:
+* Write clear, descriptive commit messages that explain what changed and why
+* Keep pull requests focused on a single concern for easier review
+* Rebase feature branches on main/master before requesting review
+* Ensure code is linted and the project runs without issues before committing changes or requesting review
+
+## Error Handling:
+* Always handle errors gracefully with appropriate user feedback
+* Log errors with enough context to troubleshoot effectively
+* Consider different error states in UI components (loading, error, empty, and success states)
+
+## Testing Standards:
+* Write tests for new functionality and bug fixes
+* Aim for meaningful test coverage rather than arbitrary percentages
+* Test edge cases and failure scenarios, not just the happy path
+* Create regression tests before making significant structural changes
+
+## Documentation:
+* Document complex logic, business rules, and non-obvious decisions
+* Keep README files up-to-date with setup and development instructions
+* Include JSDoc comments for public functions and interfaces
+* Document architectural decisions and communicate changes to the team
+
+## Frontend Rules:
+* Always use UX best practices and principles detailed in the UX section below
+* Stay consistent in design, layout, iconography, coloring and spacing
+* Never create a new component for a similar use case. Enhance existing components to fit your need without breaking other use cases
+* Optimize assets (images, fonts, etc.) for performance
+* Use semantic HTML elements appropriately
+* Follow a consistent component architecture (e.g., atomic design or feature-based organization)
+
+## UX Principles
+
+### 1. Clarity & Transparency
+- **System Status**: Always show the current state of orders (pending, delayed, processed)
+- **Information Hierarchy**: Prioritize critical information (delivery dates, affected customers)
+- **Progress Indication**: Clear indicators for multi-step processes
+
+### 2. Efficiency for Administrative Users
+- **Task Reduction**: Minimize clicks for common tasks (bulk updates, customer notifications)
+- **Batch Operations**: Allow handling multiple orders/customers simultaneously
+- **Quick Access**: Provide shortcuts to frequently used functions
+
+### 3. Error Prevention & Recovery
+- **Validation**: Proactive validation for delivery dates and product selections
+- **Confirmations**: Request confirmation for actions affecting multiple customers
+- **Reversibility**: Allow undoing actions when possible (before email notifications)
+
+### 4. Data Visualization & Organization
+- **Meaningful Grouping**: Organize orders logically (by product, date, status)
+- **Filtering & Sorting**: Provide flexible ways to find specific orders
+- **Visual Indicators**: Use color and icons to highlight status (delayed, alternative offered)
+
+### 5. Communication Design
+- **Template Management**: Structured templates for customer communications
+- **Preview Functionality**: Allow previewing emails before sending
+- **Personalization**: Support for customer-specific messaging
+- **Evaluate**:  UX implications before implementing (especially accessibility, contrast, and usability)
+
+### 6. Contextual Assistance
+- **Inline Help**: Provide guidance for complex functions
+- **Tooltips**: Explain interface elements without cluttering the UI
+- **Feedback**: Clear success/error messages after operations
+
+### 7. Accessibility & Inclusivity
+- **Keyboard Navigation**: Full functionality without mouse dependence
+- **Screen Reader Support**: Proper ARIA labels and semantic HTML
+- **Color Independence**: Don't rely solely on color to convey information
+- **Standards**: Ensure all UI components meet WCAG AA standards
+
+### 8. Responsive Design for Varied Contexts
+- **Device Flexibility**: Works on desktop/tablet for admin users
+- **Consistent Experience**: Maintain functionality across device sizes
+- **Optimized Views**: Tailor layout to different screen dimensions
+- **Approach**: Design for mobile first, then adapt for larger screens
+
+## Restructuring Approach:
+1. First analyze the dependencies and relationships between components
+2. Identify potential breaking changes before making them
+3. Consider the impact on existing functionality, especially the open orders grouped view
+4. Present a detailed plan for review before implementing changes
+5. Create regression tests to verify functionality before and after restructuring
+6. Implement major changes in phases when possible to minimize disruption
+7. Verify the project runs without issues after completing each phase
+8. Never let unused files and folders linger. Prevent dead code and bloating at all cost!
+9. Keeping files small and focused, Cleaning up unused code
+
+### Developer Best Practices (MOST IMPORTANT)
+- **Clarify Requirements**: Always ask questions until you are at least 95% sure you understand the requirements.
+- **Professionalism & UX Excellence**: Act as a professional UX frontend designer with deep expertise in UX fundamentals and best practices.
+- **Maintain Clean Architecture**: Prevent bloating at all costs. Keep folders, files, and code neat and organized. Remove outdated code promptly to avoid clutter.
+- **Keep Code Integrity**: Lint and test your code after every phase until all issues are resolved.
+  - Reduce code duplication.
+  - Ensure visual consistency.
+  - Make future updates easier (i.e., change once, update everywhere).
+  - Follow proper component architecture.
