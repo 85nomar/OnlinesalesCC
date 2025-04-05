@@ -1,20 +1,17 @@
-﻿namespace OnlinesalesCC.Server.Models
+﻿using System;
+using System.Collections.Generic;
+
+namespace OnlinesalesCC.Server.Models
 {
-    public class OpenOrders
+    public partial class OpenOrders
     {
-        public int BestellNr { get; set; }
-
-        public DateTime Erstelldatum { get; set; }
-
-        public int ArtikelNr { get; set; }
-
-        public string? Hrs { get; set; }
-        public string? Artikel { get; set; }
-
-        public int? WgrNo { get; set; }
-
-        public int Anzahl { get; set; }
-
-        public string? BestellStatus { get; set; }
+        public long BestellNr { get; set; } // PK, bigint, not null (not int)
+        public DateTime? Erstelldatum { get; set; } // datetime, null (not string)
+        public int ArtikelNr { get; set; } // PK, int, not null
+        public string? Hrs { get; set; } // nvarchar, null
+        public string? Artikel { get; set; } // nvarchar, null
+        public string? WgrNo { get; set; } // varchar, null (not int)
+        public int? Anzahl { get; set; } // int, null
+        public string? BestellStatus { get; set; } // nvarchar, null
     }
 }

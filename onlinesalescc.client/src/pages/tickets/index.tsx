@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TicketsService } from "@/services/api";
 import DataTable from "@/components/DataTable";
 import ExpandableText from "@/components/ExpandableText";
 import DateFormatter, { parseAndFormatDate } from "@/components/DateFormatter";
-import type { Ticket } from "@shared/schema";
+import type { Ticket } from "@/shared/types";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -68,10 +68,10 @@ export default function TicketsPage() {
       accessor: (row: Ticket) => row.comment,
       cell: (value: string, row: Ticket) => (
         <div className="h-[3.5rem] py-2 flex items-start">
-          <ExpandableText 
-            text={value} 
-            maxLines={2} 
-            className="max-w-md w-full" 
+          <ExpandableText
+            text={value}
+            maxLines={2}
+            className="max-w-md w-full"
             metadata={{
               title: `${t('tickets.ticketId', 'Ticket')} #${row.ticketId}`,
               items: [
@@ -102,7 +102,7 @@ export default function TicketsPage() {
       accessor: (row: Ticket) => row,
       cell: (_: any, row: Ticket) => (
         <div className="flex justify-end space-x-2">
-          <ActionIcon 
+          <ActionIcon
             icon={<PencilIcon />}
             title="common.editTicket"
             size="sm"
@@ -111,14 +111,14 @@ export default function TicketsPage() {
               handleEditTicket(row);
             }}
           />
-          <ActionIcon 
+          <ActionIcon
             icon={<TrashIcon />}
             title="common.deleteTicket"
             variant="destructive"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleDeleteTicket(row.id);
+              handleDeleteTicket(row.ticketId.toString());
             }}
           />
         </div>
@@ -160,8 +160,8 @@ export default function TicketsPage() {
             <div className="text-xs bg-muted/40 px-2 py-1 rounded">
               <span className="font-medium">{tickets.length}</span> {t('dashboard.tickets', 'tickets')}
             </div>
-            <Button 
-              type="button" 
+            <Button
+              type="button"
               onClick={() => {
                 setTicketToEdit(null);
                 setIsAddModalOpen(true);
@@ -174,12 +174,12 @@ export default function TicketsPage() {
             </Button>
           </div>
         </div>
-        
+
         {/* Tickets Table */}
         <div className="bg-background dark:bg-darkElevated rounded-lg shadow-sm overflow-hidden">
-          <DataTable 
-            data={tickets} 
-            columns={columns} 
+          <DataTable
+            data={tickets}
+            columns={columns}
             isLoading={isLoading}
             searchable={true}
             searchFields={["ticketId", "bestellNr", "artikelNr", "comment", "byUser", "entrydate"]}
@@ -188,8 +188,8 @@ export default function TicketsPage() {
       </div>
 
       {/* Add/Edit Ticket Modal */}
-      <AddTicketModal 
-        isOpen={isAddModalOpen} 
+      <AddTicketModal
+        isOpen={isAddModalOpen}
         onClose={() => {
           setIsAddModalOpen(false);
           setTicketToEdit(null);

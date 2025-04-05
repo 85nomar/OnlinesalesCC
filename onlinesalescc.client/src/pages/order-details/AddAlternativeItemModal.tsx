@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { OrdersAdditionalService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import { AlternativeItem } from "@/lib/mockData";
+import { AlternativeItem } from "@/shared/types";
 
 interface AddAlternativeItemModalProps {
   isOpen: boolean;
@@ -34,8 +34,8 @@ interface AddAlternativeItemModalProps {
   currentAlternatives: AlternativeItem[];
 }
 
-export default function AddAlternativeItemModal({ 
-  isOpen, 
+export default function AddAlternativeItemModal({
+  isOpen,
   onClose,
   onSuccess,
   artikelNr,
@@ -45,12 +45,23 @@ export default function AddAlternativeItemModal({
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Add debug logging for current alternatives
+  useEffect(() => {
+    if (isOpen) {
+      console.log("AddAlternativeItemModal opened with:", {
+        artikelNr,
+        currentAlternativesCount: currentAlternatives?.length || 0,
+        currentAlternatives
+      });
+    }
+  }, [isOpen, artikelNr, currentAlternatives]);
+
   // Create the validation schema with empty messages to avoid duplication
   const validationSchema = z.object({
     artikelNr: z.coerce.number().min(1000, { message: "" }),
     artikel: z.string().min(1, { message: "" })
   });
-  
+
   type AlternativeItemFormValues = z.infer<typeof validationSchema>;
 
   // Initialize the form
@@ -69,7 +80,7 @@ export default function AddAlternativeItemModal({
 
   // Get query client from React Query
   const queryClient = useQueryClient();
-  
+
   // Handle form submission
   const onSubmit = async (values: AlternativeItemFormValues) => {
     // Check if trying to add the same item as the original
@@ -81,7 +92,7 @@ export default function AddAlternativeItemModal({
       });
       return;
     }
-    
+
     // Check if already added
     if (isAlreadyAdded(values.artikelNr)) {
       toast({
@@ -91,34 +102,48 @@ export default function AddAlternativeItemModal({
       });
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
-      await OrdersAdditionalService.addAlternativeItem(artikelNr, values);
-      
+      // Create a proper AlternativeItem object
+      const alternativeItem: AlternativeItem = {
+        orderArtikelNr: artikelNr,
+        alternativeArtikelNr: values.artikelNr,
+        alternativeArtikel: values.artikel,
+        artikelNr: values.artikelNr,
+        artikel: values.artikel
+      };
+
+      await OrdersAdditionalService.addAlternativeItem(artikelNr, alternativeItem);
+
       // Invalidate all queries that might use this data
       // Invalidate order details page queries
       queryClient.invalidateQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
       // Invalidate open orders page queries to show the updated alternative items indicator
       queryClient.invalidateQueries({ queryKey: ['/api/orders/additional'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders/grouped'] });
-      
+
+      // Force a refetch of the specific data for this article number
+      queryClient.refetchQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
+
+      console.log(`Added alternative item for article ${artikelNr}:`, alternativeItem);
+
       toast({
         title: t('common.success'),
         description: t('orders.alternativeItemAdded', "Alternative item added successfully"),
       });
-      
+
       onSuccess();
       form.reset({ artikelNr: undefined, artikel: "" });
     } catch (error: any) {
       console.error("Error adding alternative item:", error);
-      
+
       // Extract more detailed error message if available
-      const errorMessage = error.message 
+      const errorMessage = error.message
         ? `${t('orders.failedToAddItem', "Failed to add alternative item")}: ${error.message}`
         : t('orders.failedToAddItem', "Failed to add alternative item. Please try again.");
-      
+
       toast({
         title: t('common.error'),
         description: errorMessage,
@@ -136,8 +161,8 @@ export default function AddAlternativeItemModal({
   };
 
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -146,7 +171,7 @@ export default function AddAlternativeItemModal({
             {t('orders.addAlternativeItem', "Add Alternative Item")}
           </DialogTitle>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -166,7 +191,7 @@ export default function AddAlternativeItemModal({
                         const inputValue = e.target.value;
                         // Only set the value if it's not empty
                         field.onChange(inputValue === '' ? undefined : parseInt(inputValue));
-                        
+
                         // Only validate if there's a value
                         if (inputValue && inputValue.length > 0) {
                           const value = parseInt(inputValue);
@@ -191,7 +216,7 @@ export default function AddAlternativeItemModal({
                 </FormItem>
               )}
             />
-            
+
             <FormField
               control={form.control}
               name="artikel"
@@ -209,7 +234,7 @@ export default function AddAlternativeItemModal({
                 </FormItem>
               )}
             />
-            
+
             <DialogFooter>
               <Button variant="outline" type="button" onClick={handleClose}>
                 {t('common.cancel', "Cancel")}

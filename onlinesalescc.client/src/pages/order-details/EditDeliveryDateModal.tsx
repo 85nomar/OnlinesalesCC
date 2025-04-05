@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -38,8 +38,8 @@ interface EditDeliveryDateModalProps {
   originalDate: string;
 }
 
-export default function EditDeliveryDateModal({ 
-  isOpen, 
+export default function EditDeliveryDateModal({
+  isOpen,
   onClose,
   onSuccess,
   artikelNr,
@@ -60,42 +60,41 @@ export default function EditDeliveryDateModal({
 
   // Get query client from React Query
   const queryClient = useQueryClient();
-  
+
   // Handle form submission
   const onSubmit = async (values: DeliveryDateFormValues) => {
     setIsSubmitting(true);
-    
+
     try {
       await OrdersAdditionalService.updateDeliveryDate(artikelNr, values.newDeliveryDate);
-      
+
       // Invalidate all queries that might use this data
       // Invalidate order details page queries
       queryClient.invalidateQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
       // Invalidate open orders page queries to show the updated delivery date
       queryClient.invalidateQueries({ queryKey: ['/api/orders/additional'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders/grouped'] });
-      
+
       toast({
         title: t('common.success'),
         description: t('orders.deliveryDateUpdated', "Delivery date updated successfully"),
       });
-      
+
       onSuccess();
-    } catch (error: any) {
-      console.error("Error updating delivery date:", error);
-      
-      // Extract more detailed error message if available
-      const errorMessage = error.message 
-        ? `${t('orders.failedToUpdateDate', "Failed to update delivery date")}: ${error.message}`
-        : t('orders.failedToUpdateDate', "Failed to update delivery date. Please try again.");
-      
+    } catch (error) {
+      console.log("Error updating delivery date:", error);
+
+      // Show toast with error message
       toast({
-        title: t('common.error'),
-        description: errorMessage,
         variant: "destructive",
+        title: t('common.error'),
+        description: error instanceof Error
+          ? error.message
+          : t('orders.deliveryDateUpdateFailed', "Failed to update delivery date"),
       });
     } finally {
       setIsSubmitting(false);
+      onClose();
     }
   };
 
@@ -106,8 +105,8 @@ export default function EditDeliveryDateModal({
   };
 
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -119,7 +118,7 @@ export default function EditDeliveryDateModal({
             {t('orders.updateEstimatedDeliveryDate', "Update the estimated delivery date for item #{{artikelNr}}", { artikelNr })}
           </DialogDescription>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -128,7 +127,7 @@ export default function EditDeliveryDateModal({
               render={({ field }) => {
                 // Convert string to Date object for the DatePicker
                 const dateValue = field.value ? new Date(field.value) : undefined;
-                
+
                 return (
                   <FormItem>
                     <FormLabel>{t('orders.newDeliveryDate', "New Delivery Date")}</FormLabel>
@@ -149,7 +148,7 @@ export default function EditDeliveryDateModal({
                           }
                         }}
                         required={true}
-                        // No focus handling needed here, we rely on the date-picker component's implementation
+                      // No focus handling needed here, we rely on the date-picker component's implementation
                       />
                     </FormControl>
                     <FormDescription className="text-xs">
@@ -160,14 +159,14 @@ export default function EditDeliveryDateModal({
                 );
               }}
             />
-            
+
             {originalDate && (
               <div className="p-4 border rounded-md bg-muted/30">
                 <div className="text-xs font-medium mb-1 text-muted-foreground">{t('orders.originalDeliveryDate', "Original Delivery Date")}</div>
                 <div className="text-sm font-medium"><DateFormatter date={originalDate} withTime={true} /></div>
               </div>
             )}
-            
+
             <DialogFooter>
               <Button variant="outline" type="button" onClick={handleClose}>
                 {t('common.cancel', "Cancel")}

@@ -24,7 +24,7 @@ import { Mail, Check } from "lucide-react";
 import { EmailService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import DateFormatter from "@/components/DateFormatter";
-import { OpenOrders, AlternativeItem } from "@/lib/mockData";
+import { OpenOrder, AlternativeItem } from "@/shared/types";
 
 interface EmailModalProps {
   isOpen: boolean;
@@ -35,7 +35,7 @@ interface EmailModalProps {
     newDeliveryDate: string;
     alternatives: AlternativeItem[];
   };
-  orders: OpenOrders[];
+  orders: OpenOrder[];
 }
 
 // Email form schema
@@ -118,8 +118,8 @@ export default function EmailModal({
   };
 
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

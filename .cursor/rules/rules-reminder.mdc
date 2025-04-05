@@ -1,0 +1,20 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+# "STOP! You are violating our 'No Dead Code' rule. Do not add new code without removing the old implementation first. I need you to:
+1. Identify the existing functionality
+2. Modify it to handle the new requirements
+3. Remove ALL redundant or deprecated code
+4. Ensure zero duplication of functionality
+
+** This is a non-negotiable requirement. Before proceeding, confirm you understand this requirement and will follow it strictly for all future changes."
+## This direct approach clearly states:
+- The specific rule being violated
+- Exactly what should be done instead
+- That it's a non-negotiable requirement
+- Asks for explicit confirmation of understanding

@@ -1,4 +1,4 @@
-@OnlinesalesCC.Server_HostAddress = http://localhost:5010
+@OnlinesalesCC.Server_HostAddress = https://localhost:5010
 
 GET {{OnlinesalesCC.Server_HostAddress}}/weatherforecast/
 Accept: application/json

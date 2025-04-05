@@ -14,32 +14,38 @@ interface HeaderProps {
 export default function Header({ toggleSidebar }: HeaderProps) {
   const [location] = useLocation();
   const { t } = useTranslation();
-  
+
   // Determine current page name for breadcrumb
   let currentPage = "";
   let breadcrumbItems = [{ name: "home", path: "/", icon: <Home className="h-4 w-4" /> }];
-  
+
   if (location === "/" || location === "/dashboard") {
     currentPage = "Dashboard";
     breadcrumbItems = [{ name: "home", path: "/", icon: <Home className="h-4 w-4" /> }];
   } else if (location.startsWith("/tickets")) {
     currentPage = "Tickets";
     breadcrumbItems = [
-      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> }, 
+      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> },
       { name: "Tickets", path: "/tickets", icon: null }
     ];
   } else if (location.startsWith("/open-orders")) {
     currentPage = "Open Orders (Grouped)";
     breadcrumbItems = [
-      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> }, 
+      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> },
       { name: "Open Orders (Grouped)", path: "/open-orders", icon: null }
     ];
   } else if (location.startsWith("/order-details")) {
     currentPage = "Order Details";
     breadcrumbItems = [
-      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> }, 
+      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> },
       { name: "Open Orders (Grouped)", path: "/open-orders", icon: null },
       { name: "Order Details", path: location, icon: null }
+    ];
+  } else if (location.startsWith("/test/tickets-api")) {
+    currentPage = "Tickets API Test";
+    breadcrumbItems = [
+      { name: "home", path: "/", icon: <Home className="h-4 w-4" /> },
+      { name: "Tickets API Test", path: "/test/tickets-api", icon: null }
     ];
   }
 
@@ -58,18 +64,18 @@ export default function Header({ toggleSidebar }: HeaderProps) {
             <Menu className="h-6 w-6" />
           </Button>
         </TooltipWrapper>
-        
+
         {/* Breadcrumbs */}
         <Breadcrumb items={breadcrumbItems} />
       </div>
-      
+
       <div className="flex items-center space-x-4">
         {/* Language selector */}
         <LanguageSelector />
-        
+
         {/* Theme toggle */}
         <ThemeToggle />
-        
+
         {/* Notifications with tooltip */}
         <TooltipWrapper content="common.notifications">
           <Button

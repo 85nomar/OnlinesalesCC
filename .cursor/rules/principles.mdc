@@ -1,0 +1,87 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Universal Coding Collaboration Guidelines and Principles
+
+## Core Development Philosophy
+- **Simplicity Over Cleverness**: Prioritize readability and maintainability over complex solutions
+- **Clean Architecture**: Keep code organized with descriptive naming and appropriate file sizes (< 300 lines)
+- **Thoughtful Implementation**: **_Independently_** analyze implications thoroughly before implementing solutions (aim for 95% confidence)
+- **Incremental Approach**: **_Self-direct_** complex requests in logical phases based on dependencies and impact
+
+## Collaboration Process
+- **Transparent Communication**: **_Voluntarily_** explain changes being made and the reasoning behind them
+- **Phase Planning**: When handling multiple tasks, **_independently_** outline approach and implementation phases
+- **Regular Updates**: Provide progress updates during complex implementations
+- **Knowledge Sharing**: Document decisions and share insights to build collective understanding
+
+## Regression and Bug-Fix Approach
+- **Thorough Analysis Before Action**: When something previously working breaks, **_independently_** analyze what improvement caused the issue before attempting fixes
+- **Solution Confidence**: Think through potential solutions until reaching at least 95% confidence in success
+- **Impact Assessment**: For changes to core functionality, **_proactively_** evaluate implications across the entire application
+  - *Example: When adding backend pagination, evaluate all components that rely on the original API response format, such as suggestion dropdowns in forms*
+- **Holistic Fixes**: **_Take ownership_** to address both the immediate issue and any secondary effects the changes may have caused
+- **Test Before Implementing**: Mentally test your solution against different use cases before writing code
+- **Document Root Causes**: Record the underlying cause of significant bugs to prevent similar issues in future work
+- **API Change Management**: When modifying API responses or request formats, identify and update all consumers of that API
+  - *Example: Maintain backward compatibility or create a migration plan for frontend components when changing backend data structures*
+
+## UX Design Excellence
+- **User-Centered Thinking**: **_Independently_** advocate for user needs throughout the development process
+- **Design Fundamentals**: Apply established UX patterns and principles without requiring explicit direction
+- **Accessibility Awareness**: **_Proactively_** ensure designs meet WCAG standards and are inclusive for all users
+- **Interaction Design**: **_Take ownership_** of creating intuitive, efficient user flows and interactions
+- **Visual Hierarchy**: **_Self-direct_** the organization of elements to guide users naturally through interfaces
+- **Usability Testing**: **_Autonomously_** identify when and how to validate solutions with appropriate testing methods
+- **Cognitive Load Management**: Balance functionality and simplicity to avoid overwhelming users
+  - *Example: When designing complex filtering interfaces, consider progressive disclosure patterns rather than displaying all options at once*
+
+## Component Development
+- **Reusability Focus**: Enhance existing components rather than creating new ones for similar use cases
+- **Consistent Design**: Maintain uniformity in design patterns and style conventions
+- **Semantic Implementation**: Use appropriate language constructs and follow best practices
+- **Performance Optimization**: Optimize assets and code for maximum efficiency
+
+## Coding Practices
+- **DRY Principle**: Avoid code duplication; leverage existing functionality
+- **Environment Awareness**: Write code that works appropriately across all environments
+- **Scope Discipline**: Make only changes that are requested or clearly necessary
+- **No Dead Code**: **_Proactively_** remove unused code, files, and folders immediately after deprecation
+- **Testing Integrity**: Use mocks only for testing, never in production code
+- **Descriptive Naming**: Use self-explanatory names for variables, functions, and files
+- **Configuration Management**: Respect and properly handle configuration files
+
+## Quality Assurance
+- **Test-Driven Approach**: **_Self-initiate_** tests for new functionality and bug fixes
+- **Edge Case Coverage**: **_Anticipate_** failure scenarios and boundary conditions
+- **Regression Prevention**: Create regression tests before structural changes
+- **Code Quality Tools**: Utilize linting, formatting, and static analysis tools appropriate to the language/framework
+
+## Documentation
+- **Comprehensive Documentation**: Document complex logic, business rules, and architectural decisions
+- **Setup Instructions**: Maintain clear setup and development instructions
+- **Code Comments**: Include appropriate comments for complex sections while avoiding redundant documentation
+- **API Documentation**: Clearly document interfaces, endpoints, and integration points
+
+## Version Control
+- **Meaningful Commits**: Write clear commit messages explaining what changed and why
+- **Focused Changes**: Keep commits and pull requests centered on single concerns
+- **Branch Strategy**: Follow consistent branch naming and management conventions
+- **Code Review Process**: Establish and follow review standards appropriate to project scale
+
+## Cross-Project Best Practices
+- **Early Refactoring**: Refactor when complexity increases to maintain code health
+- **Accessibility Standards**: Follow appropriate accessibility guidelines for the project type
+- **Responsive Design**: Ensure appropriate display across relevant device types
+- **Performance Budgets**: Set and adhere to appropriate performance metrics
+- **Error Handling**: Implement comprehensive error handling strategies
+- **Security First**: Follow security best practices appropriate to the project domain
+- **Scalability Considerations**: Design with potential growth in mind

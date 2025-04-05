@@ -11,11 +11,14 @@ import { EyeIcon, PencilIcon, PlusIcon, TrashIcon } from "@/components/ui/icons"
 import { Plus, Mail, PenSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { Badge } from "@/components/ui/badge";
 import EmailModal from "./EmailModal";
 import EditDeliveryDateModal from "./EditDeliveryDateModal";
 import AddAlternativeItemModal from "./AddAlternativeItemModal";
 import AddTicketModal from "@/components/tickets/AddTicketModal";
-import { productGroups, OpenOrders } from "@/lib/mockData";
+import OrderTicketsModal from "../open-orders/OrderTicketsModal";
+import { OpenOrder, AlternativeItem } from "@/shared/types";
+import { productGroups } from "@/services/productGroups";
 
 export default function OrderDetailsPage() {
   const [, params] = useRoute("/order-details/:artikelNr");
@@ -23,17 +26,22 @@ export default function OrderDetailsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
-  
+
   const artikelNr = params ? parseInt(params.artikelNr) : 0;
-  
+
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isDeliveryDateModalOpen, setIsDeliveryDateModalOpen] = useState(false);
   const [isAlternativeModalOpen, setIsAlternativeModalOpen] = useState(false);
   const [isAddTicketModalOpen, setIsAddTicketModalOpen] = useState(false);
-  
+  const [isTicketsModalOpen, setIsTicketsModalOpen] = useState(false);
+
+  // State for order-specific tickets modal
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [isOrderTicketsModalOpen, setIsOrderTicketsModalOpen] = useState(false);
+
   // Fetch individual orders for this item number
   const { data: orders = [], isLoading: isLoadingOrders } = useQuery({
-    queryKey: [`/api/orders/by-artikelnr/${artikelNr}`],
+    queryKey: [`/api/orders/by-itemnr/${artikelNr}`],
     queryFn: async () => {
       try {
         return await OrdersService.getOpenOrdersByArtikelNr(artikelNr);
@@ -54,13 +62,21 @@ export default function OrderDetailsPage() {
     queryKey: ['/api/orders/grouped', artikelNr],
     queryFn: async () => {
       try {
-        const allGrouped = await OrdersService.getOpenOrdersGrouped();
-        console.log('Order details - fetched grouped info:', { 
-          allGrouped, 
+        const allGroupedResponse = await OrdersService.getOpenOrdersGrouped();
+        // Process the response to handle both array and object formats
+        const allGrouped = Array.isArray(allGroupedResponse)
+          ? allGroupedResponse
+          : 'items' in allGroupedResponse
+            ? allGroupedResponse.items
+            : [];
+
+        console.log('Order details - fetched grouped info:', {
+          allGrouped,
           artikelNr,
-          matchedItem: allGrouped.find(item => item.ArtikelNr === artikelNr)
+          matchedItem: allGrouped.find((item: any) => item.ArtikelNr === artikelNr)
         });
-        return allGrouped.find(item => item.ArtikelNr === artikelNr) || null;
+
+        return allGrouped.find((item: any) => item.ArtikelNr === artikelNr) || null;
       } catch (error) {
         console.error("Failed to fetch grouped order info:", error);
         toast({
@@ -73,14 +89,22 @@ export default function OrderDetailsPage() {
     }
   });
 
-  // Fetch additional data for this item number
+  // Fetch additional info for this item
   const { data: additionalInfo, refetch: refetchAdditional } = useQuery({
     queryKey: [`/api/orders/additional/${artikelNr}`],
     queryFn: async () => {
       try {
-        return await OrdersAdditionalService.getOrderAdditionalByArtikelNr(artikelNr);
+        const data = await OrdersAdditionalService.getOrderAdditionalByArtikelNr(artikelNr);
+        console.log(`Fetched additional data for artikelNr=${artikelNr}:`, data);
+
+        // Ensure alternativeItems is always an array
+        if (data && !data.alternativeItems) {
+          data.alternativeItems = [];
+        }
+
+        return data;
       } catch (error) {
-        console.error("Failed to fetch additional info:", error);
+        console.error("Failed to fetch additional data:", error);
         toast({
           title: "Error",
           description: "Failed to load delivery dates and alternatives. Please try again.",
@@ -90,10 +114,22 @@ export default function OrderDetailsPage() {
       }
     }
   });
-  
+
+  // Debug additionalInfo structure
+  useEffect(() => {
+    if (additionalInfo) {
+      console.log("Current additionalInfo state:", {
+        hasData: !!additionalInfo,
+        hasAlternativeItems: !!additionalInfo.alternativeItems,
+        alternativeItemsCount: additionalInfo.alternativeItems?.length || 0,
+        newDeliveryDate: additionalInfo.newDeliveryDate || 'null'
+      });
+    }
+  }, [additionalInfo]);
+
   // Fetch tickets for this item number
   const { data: tickets = [], refetch: refetchTickets } = useQuery({
-    queryKey: [`/api/tickets/by-artikelnr/${artikelNr}`],
+    queryKey: [`/api/tickets/by-itemnr/${artikelNr}`],
     queryFn: async () => {
       try {
         return await TicketsService.getTicketsByArtikelNr(artikelNr);
@@ -135,7 +171,7 @@ export default function OrderDetailsPage() {
   const handleRemoveAlternative = async (altArtikelNr: number) => {
     try {
       await OrdersAdditionalService.removeAlternativeItem(artikelNr, altArtikelNr);
-      
+
       // Invalidate all queries that might use this data
       if (queryClient) {
         // Invalidate order details page queries
@@ -144,7 +180,7 @@ export default function OrderDetailsPage() {
         queryClient.invalidateQueries({ queryKey: ['/api/orders/additional'] });
         queryClient.invalidateQueries({ queryKey: ['/api/orders/grouped'] });
       }
-      
+
       refetchAdditional();
       toast({
         title: t('common.success'),
@@ -160,19 +196,30 @@ export default function OrderDetailsPage() {
     }
   };
 
+  // Handle opening tickets modal
+  const handleViewTickets = () => {
+    setIsTicketsModalOpen(true);
+  };
+
+  // Handle opening order-specific tickets modal
+  const handleViewOrderTickets = (bestellNr: number) => {
+    setSelectedOrderId(bestellNr);
+    setIsOrderTicketsModalOpen(true);
+  };
+
   // Get delivery date status for styling
   const deliveryDate = additionalInfo?.newDeliveryDate || groupedInfo?.Erstelldatum || "";
   const dateStatus = getDeliveryDateStatus(deliveryDate);
-  const dateColor = 
+  const dateColor =
     dateStatus === 'danger' ? 'text-danger font-medium' :
-    dateStatus === 'warning' ? 'text-warning font-medium' :
-    'text-gray-900 dark:text-white font-medium';
+      dateStatus === 'warning' ? 'text-warning font-medium' :
+        'text-gray-900 dark:text-white font-medium';
 
   // Table columns configuration
   const columns = [
     {
       header: t('orders.orderNumber'),
-      accessor: (row: OpenOrders) => row.BestellNr,
+      accessor: (row: OpenOrder) => row.BestellNr,
       cell: (value: number) => (
         <span className="font-mono">{value}</span>
       ),
@@ -180,20 +227,20 @@ export default function OrderDetailsPage() {
     },
     {
       header: t('orders.creationDate'),
-      accessor: (row: OpenOrders) => row.Erstelldatum,
+      accessor: (row: OpenOrder) => row.Erstelldatum,
       cell: (value: string) => <DateFormatter date={value} withTime={true} />,
       sortable: true
     },
     {
       header: t('orders.quantity'),
-      accessor: (row: OpenOrders) => row.Anzahl,
+      accessor: (row: OpenOrder) => row.Anzahl,
       sortable: true
     },
     {
       header: t('common.tickets'),
-      accessor: (row: OpenOrders) => {
+      accessor: (row: OpenOrder) => {
         // Check if there are tickets for this order
-        const orderTickets = tickets.filter(ticket => 
+        const orderTickets = tickets.filter(ticket =>
           ticket.bestellNr && ticket.bestellNr.toString() === row.BestellNr.toString()
         );
         return {
@@ -205,80 +252,61 @@ export default function OrderDetailsPage() {
         if (!value) {
           return <span className="text-muted-foreground">-</span>;
         }
-        
+
         return (
-          <div 
-            className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium ${
-              value.count > 0 
-                ? "bg-primary/10 text-primary dark:text-primary-foreground" 
-                : "bg-muted text-muted-foreground"
-            }`}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (value.count > 0) {
+                handleViewOrderTickets(value.bestellNr);
+              }
+            }}
+            className="flex items-center justify-center p-1"
+            disabled={value.count === 0}
             title={value.count > 0 ? `${value.count} ${t('common.tickets')}` : ""}
           >
-            {value.count}
-          </div>
+            <Badge variant={value.count > 0 ? "counter" : "zero"} className="flex items-center justify-center w-8 h-8">
+              {value.count}
+            </Badge>
+          </button>
         );
       },
       sortable: true
     },
     {
       header: t('orders.status'),
-      accessor: (row: OpenOrders) => row.BestellStatus,
+      accessor: (row: OpenOrder) => row.BestellStatus,
       cell: (value: string) => {
-        // Define colors and labels based on status
-        const statusConfig = {
-          'CANCELLED': { 
-            bg: 'bg-red-100 dark:bg-red-900/30', 
-            text: 'text-red-800 dark:text-red-200',
-            label: t('statusLabels.cancelled')
-          },
-          'PICKED_UP': { 
-            bg: 'bg-green-100 dark:bg-green-900/30', 
-            text: 'text-green-800 dark:text-green-200',
-            label: t('statusLabels.pickedUp', 'Picked Up')
-          },
-          'ORDER_COMPLETED': { 
-            bg: 'bg-blue-100 dark:bg-blue-900/30', 
-            text: 'text-blue-800 dark:text-blue-200',
-            label: t('statusLabels.completed', 'Completed')
-          },
-          'UNKNOWN': { 
-            bg: 'bg-gray-100 dark:bg-gray-800', 
-            text: 'text-gray-800 dark:text-gray-300',
-            label: t('statusLabels.unknown', 'Status Unknown')
-          },
-          'RETURN_RECEIVED': { 
-            bg: 'bg-purple-100 dark:bg-purple-900/30', 
-            text: 'text-purple-800 dark:text-purple-200',
-            label: t('statusLabels.returnReceived', 'Return Received')
-          },
-          'SHIPPED': { 
-            bg: 'bg-indigo-100 dark:bg-indigo-900/30', 
-            text: 'text-indigo-800 dark:text-indigo-200',
-            label: t('statusLabels.shipped')
-          }
-        };
-        
-        // Use gray color for unknown status (indicated by 0 or empty string)
         if (!value || value === '0' || value === '') {
-          return (
-            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300">
-              {t('statusLabels.unknown', 'Status Unknown')}
-            </span>
-          );
+          return <Badge variant="awaiting">{t('statusLabels.unknown', 'Status Unknown')}</Badge>;
         }
-        
-        const config = statusConfig[value as keyof typeof statusConfig] || {
-          bg: 'bg-yellow-100 dark:bg-yellow-900/30',
-          text: 'text-yellow-800 dark:text-yellow-200',
-          label: value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+
+        // Determine the badge variant
+        const getBadgeVariant = (status: string): string => {
+          const normalizedStatus = status.trim().toUpperCase();
+
+          if (normalizedStatus === "SCHEDULED")
+            return "scheduled";
+          if (normalizedStatus.includes("CANCELLED"))
+            return "backordered";
+          if (normalizedStatus.includes("PICKED_UP") || normalizedStatus.includes("COMPLETED"))
+            return "scheduled";
+          if (normalizedStatus.includes("SHIPPED"))
+            return "shipped";
+          if (normalizedStatus.includes("RETURN"))
+            return "awaiting";
+          if (normalizedStatus.includes("PROCUREMENT") || normalizedStatus.includes("TRANSFER"))
+            return "procurement";
+          if (normalizedStatus.includes("FULFILLMENT") || normalizedStatus.includes("INITIATED"))
+            return "fulfillment";
+
+          return "default";
         };
-        
-        return (
-          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${config.bg} ${config.text}`}>
-            {config.label}
-          </span>
-        );
+
+        const variant = getBadgeVariant(value);
+        const label = value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+        return <Badge variant={variant as any}>{label}</Badge>;
       },
       sortable: true
     }
@@ -311,12 +339,12 @@ export default function OrderDetailsPage() {
               <div>
                 <h1 className="text-lg font-bold text-foreground">{groupedInfo?.Artikel}</h1>
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-medium">{groupedInfo?.Hrs}</span> • 
+                  <span className="font-medium">{groupedInfo?.Hrs}</span> •
                   <span className="ml-1 font-mono">#{groupedInfo?.ArtikelNr}</span>
                 </div>
               </div>
             </div>
-            
+
             {/* Right: Action Buttons */}
             <div className="flex gap-2">
               <Button
@@ -338,7 +366,7 @@ export default function OrderDetailsPage() {
               </Button>
             </div>
           </div>
-          
+
           {/* Item details grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
             <div className="bg-muted/30 rounded p-2">
@@ -364,41 +392,43 @@ export default function OrderDetailsPage() {
             <div className="bg-muted/30 rounded p-2">
               <div className="text-xs font-medium text-muted-foreground">{t('common.tickets')}</div>
               <div className="text-sm font-medium">
-                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                  tickets.length > 0
-                    ? "bg-primary/10 text-primary dark:text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}>
-                  {tickets.length}
-                </span>
+                <button
+                  onClick={handleViewTickets}
+                  className="flex justify-center items-center p-1"
+                  title={tickets.length > 0 ? `${tickets.length} ${t('common.tickets')}` : ""}
+                  disabled={tickets.length === 0}
+                >
+                  <Badge variant={tickets.length > 0 ? "counter" : "zero"}>
+                    {tickets.length}
+                  </Badge>
+                </button>
               </div>
             </div>
           </div>
         </div>
-        
+
         {/* Delivery Date & Alternatives */}
         <div className="border-t border-border grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
           {/* Delivery Date */}
           <div className="p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-medium text-muted-foreground">{t('orders.deliveryDate')}</h3>
-              <ActionIcon 
+              <ActionIcon
                 onClick={handleEditDeliveryDate}
                 icon={<PencilIcon />}
                 title={t('orders.editDeliveryDate')}
                 size="sm"
               />
             </div>
-            <div className={`px-2 py-1.5 rounded-md border ${
-              dateStatus === 'danger' ? 'border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-900/30' : 
-              dateStatus === 'warning' ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-900/30' : 
-              'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-900/30'
-            }`}>
+            <div className={`px-2 py-1.5 rounded-md border ${dateStatus === 'danger' ? 'border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-900/30' :
+              dateStatus === 'warning' ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-900/30' :
+                'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-900/30'
+              }`}>
               <div className="flex items-center">
                 <span className={`text-sm font-medium ${dateColor}`}>
                   {deliveryDate ? <DateFormatter date={deliveryDate} withTime={true} /> : t('orders.noDateAvailable', 'No date available')}
                 </span>
-                
+
                 {additionalInfo?.originalDeliveryDate && (
                   <span className="ml-2 text-xs text-muted-foreground line-through">
                     <DateFormatter date={additionalInfo.originalDeliveryDate} withTime={true} />
@@ -407,32 +437,40 @@ export default function OrderDetailsPage() {
               </div>
             </div>
           </div>
-          
+
           {/* Alternative Items */}
           <div className="p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-medium text-muted-foreground">{t('orders.alternativeItems')}</h3>
-              <ActionIcon 
+              <ActionIcon
                 onClick={handleAddAlternative}
                 icon={<PlusIcon />}
                 title={t('orders.addAlternativeItem')}
                 size="sm"
               />
             </div>
-            
+
             <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+              {/* Debug info on alternative items */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="text-xs p-1 bg-yellow-50 text-yellow-800 rounded mb-1 hidden">
+                  Items: {additionalInfo?.alternativeItems ? additionalInfo.alternativeItems.length : 'none'}
+                </div>
+              )}
+
+              {/* Check if additionalInfo exists and has alternativeItems */}
               {additionalInfo?.alternativeItems && additionalInfo.alternativeItems.length > 0 ? (
-                additionalInfo.alternativeItems.map(item => (
-                  <div 
-                    key={item.artikelNr} 
+                additionalInfo.alternativeItems.map((item: AlternativeItem) => (
+                  <div
+                    key={item.artikelNr || item.alternativeArtikelNr}
                     className="py-1 px-2 bg-muted/30 rounded flex items-center justify-between"
                   >
                     <div className="truncate mr-2">
-                      <span className="text-xs text-foreground">{item.artikel}</span>
-                      <span className="ml-1 text-xs text-muted-foreground font-mono">#{item.artikelNr}</span>
+                      <span className="text-xs text-foreground">{item.artikel || item.alternativeArtikel}</span>
+                      <span className="ml-1 text-xs text-muted-foreground font-mono">#{item.artikelNr || item.alternativeArtikelNr}</span>
                     </div>
-                    <ActionIcon 
-                      onClick={() => handleRemoveAlternative(item.artikelNr)}
+                    <ActionIcon
+                      onClick={() => handleRemoveAlternative(item.alternativeArtikelNr || item.artikelNr || 0)}
                       icon={<TrashIcon />}
                       title={t('orders.removeAlternativeItem')}
                       size="sm"
@@ -449,7 +487,7 @@ export default function OrderDetailsPage() {
           </div>
         </div>
       </div>
-      
+
       {/* Order List */}
       <div className="bg-background dark:bg-darkElevated rounded-lg shadow-sm overflow-hidden">
         <div className="px-3 py-2 border-b border-border flex items-center justify-between">
@@ -461,19 +499,19 @@ export default function OrderDetailsPage() {
             <span className="font-medium">{orders.length}</span> {t('common.orders')}
           </div>
         </div>
-        
-        <DataTable 
-          data={orders} 
-          columns={columns} 
+
+        <DataTable
+          data={orders}
+          columns={columns}
           isLoading={isLoadingOrders}
           searchable={true}
           searchFields={["BestellNr", "BestellStatus"]}
         />
       </div>
-      
+
       {/* Email Modal */}
-      <EmailModal 
-        isOpen={isEmailModalOpen} 
+      <EmailModal
+        isOpen={isEmailModalOpen}
         onClose={() => setIsEmailModalOpen(false)}
         itemInfo={{
           artikelNr,
@@ -483,10 +521,10 @@ export default function OrderDetailsPage() {
         }}
         orders={orders}
       />
-      
+
       {/* Edit Delivery Date Modal */}
-      <EditDeliveryDateModal 
-        isOpen={isDeliveryDateModalOpen} 
+      <EditDeliveryDateModal
+        isOpen={isDeliveryDateModalOpen}
         onClose={() => setIsDeliveryDateModalOpen(false)}
         onSuccess={() => {
           refetchAdditional();
@@ -496,34 +534,57 @@ export default function OrderDetailsPage() {
         currentDate={additionalInfo?.newDeliveryDate || groupedInfo?.Erstelldatum || ""}
         originalDate={additionalInfo?.originalDeliveryDate || groupedInfo?.Erstelldatum || ""}
       />
-      
+
       {/* Add Alternative Item Modal */}
-      <AddAlternativeItemModal 
-        isOpen={isAlternativeModalOpen} 
+      <AddAlternativeItemModal
+        isOpen={isAlternativeModalOpen}
         onClose={() => setIsAlternativeModalOpen(false)}
         onSuccess={() => {
+          console.log("Alternative item added successfully, refetching data...");
+          // Force refetch the additional data for this article
+          queryClient.invalidateQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
+          queryClient.refetchQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
           refetchAdditional();
           setIsAlternativeModalOpen(false);
         }}
         artikelNr={artikelNr}
         currentAlternatives={additionalInfo?.alternativeItems || []}
       />
-      
+
       {/* Add Ticket Modal */}
-      <AddTicketModal 
-        isOpen={isAddTicketModalOpen} 
+      <AddTicketModal
+        isOpen={isAddTicketModalOpen}
         onClose={() => setIsAddTicketModalOpen(false)}
         onSuccess={() => {
           // Refetch open orders grouped to update ticket count
           queryClient.invalidateQueries({ queryKey: ['/api/orders/grouped'] });
           // Refetch tickets
           queryClient.invalidateQueries({ queryKey: ['/api/tickets'] });
-          queryClient.invalidateQueries({ queryKey: [`/api/tickets/by-artikelnr/${artikelNr}`] });
+          queryClient.invalidateQueries({ queryKey: [`/api/tickets/by-itemnr/${artikelNr}`] });
           refetchTickets();
           setIsAddTicketModalOpen(false);
         }}
         artikelNr={artikelNr}
       />
+
+      {/* Tickets Modal */}
+      <OrderTicketsModal
+        isOpen={isTicketsModalOpen}
+        onClose={() => setIsTicketsModalOpen(false)}
+        artikelNr={artikelNr}
+      />
+
+      {/* Order-specific Tickets Modal */}
+      {selectedOrderId && (
+        <OrderTicketsModal
+          isOpen={isOrderTicketsModalOpen}
+          onClose={() => {
+            setIsOrderTicketsModalOpen(false);
+            setSelectedOrderId(null);
+          }}
+          bestellNr={selectedOrderId}
+        />
+      )}
     </>
   );
 }
