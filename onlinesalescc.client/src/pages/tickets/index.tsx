@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TicketsService } from "@/services/api";
 import DataTable from "@/components/DataTable";
 import ExpandableText from "@/components/ExpandableText";
 import DateFormatter, { parseAndFormatDate } from "@/components/DateFormatter";
-import type { Ticket } from "@/shared/types";
+import type { Ticket } from "@/shared/schema";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -118,7 +118,7 @@ export default function TicketsPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleDeleteTicket(row.ticketId.toString());
+              handleDeleteTicket(row.id);
             }}
           />
         </div>

@@ -8,7 +8,6 @@ import DateFormatter from "@/components/DateFormatter";
 import { useQueryClient } from "@tanstack/react-query";
 import React from "react";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import OrderTicketForm from './OrderTicketForm';
 
 // UI components
 import {
@@ -17,38 +16,31 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Form,
+  FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-  FormDescription
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 
 // Types, schemas and services
-import type { Ticket, OpenOrder, OpenOrderGrouped } from "@/shared/types";
+import type { Ticket } from "@/shared/schema";
+import type { OpenOrders, OpenOrdersGrouped } from "@/shared/schema";
 import {
   ticketFormSchema,
   orderTicketFormSchema,
-  type TicketFormValues,
-  type OrderTicketFormValues
+  TicketFormValues,
+  OrderTicketFormValues
 } from "@/lib/validationSchemas";
-import { TicketsService } from "@/services/api";
+import { TicketsService } from "@/services/tickets.service";
 import { OrdersService, orderCache } from "@/services/orders.service";
-
-// Type aliases for backward compatibility (to match existing code)
-type OpenOrders = OpenOrder;
-type OpenOrdersGrouped = OpenOrderGrouped;
 
 interface AddTicketModalProps {
   isOpen: boolean;
@@ -177,7 +169,7 @@ function AddTicketModal({
   const isEditMode = !!ticket;
 
   // Add a ref for debounce timer at the component level
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -321,14 +313,6 @@ function AddTicketModal({
       setIsLoadingOrders(true);
       OrdersService.getOpenOrdersByArtikelNr(artikelNr)
         .then((data) => {
-          // Add direct debug log of raw data
-          console.log('Raw API response for orders:', data);
-          console.log('Type of data:', typeof data);
-          console.log('Is Array?', Array.isArray(data));
-          if (Array.isArray(data)) {
-            console.log('First few orders:', data.slice(0, 3));
-          }
-
           safeSetOrders(data);
           // Don't automatically open the order selection
           setOrderDropdownOpen(false);
@@ -343,36 +327,10 @@ function AddTicketModal({
     }
   }, [isOpen, artikelNr, bestellNr, orderForm, isOrderMode]);
 
-  // Add effect for order dropdown debugging
-  useEffect(() => {
-    if (orderDropdownOpen) {
-      console.log('Order dropdown opened');
-      console.log('Current orders state:', orders);
-      console.log('Orders count:', orders.length);
-      console.log('Is loading orders:', isLoadingOrders);
-      console.log('Order search term:', orderSearch);
-    }
-  }, [orderDropdownOpen, orders, isLoadingOrders, orderSearch]);
-
   // Modify setOrders to ensure it always sets an array
   const safeSetOrders = (data: any) => {
     // Always ensure orders is set as an array even if API returns something else
-    if (!data) {
-      console.warn("Received null or undefined data in safeSetOrders");
-      setOrders([]);
-      return;
-    }
-
-    if (Array.isArray(data)) {
-      console.log(`Setting ${data.length} orders from array data`);
-      setOrders(data);
-    } else if (data && typeof data === 'object' && 'items' in data) {
-      console.log(`Setting ${data.items.length} orders from paginated data`);
-      setOrders(Array.isArray(data.items) ? data.items : []);
-    } else {
-      console.warn("Received unexpected data format in safeSetOrders:", data);
-      setOrders([]);
-    }
+    setOrders(Array.isArray(data) ? data : []);
   };
 
   // Helper function to filter orders or grouped orders by search term
@@ -565,11 +523,9 @@ function AddTicketModal({
       setIsLoadingExistingTickets(true);
       setShowExistingTickets(false); // Hide until loaded
 
-      console.log(`Looking up tickets for order: ${orderNumber} using correct API endpoint`);
       // Use the service method which handles validation and fallback to client-side filtering
       TicketsService.getTicketsByBestellNr(orderNumber)
         .then((tickets) => {
-          console.log(`Found ${tickets.length} tickets for order ${orderNumber}`);
           setExistingTickets(tickets);
 
           // Only show existing tickets if there are any
@@ -735,58 +691,6 @@ function AddTicketModal({
     }
   }, [itemSearch]);
 
-  // Function for handling item selection in the generic form
-  const handleItemSelection = React.useCallback((item: any) => {
-    console.log('Item selected in generic form:', item);
-
-    // Clear search
-    setItemSearch('');
-
-    // Close dropdown
-    setItemDropdownOpen(false);
-
-    // Update form value using multiple approaches for maximum reliability
-    const itemNumberStr = String(item.ArtikelNr);
-    console.log('Setting item number to:', itemNumberStr);
-
-    // 1. Set form value through React Hook Form
-    genericForm.setValue('artikelNr', item.ArtikelNr);
-
-    // 2. Directly update DOM input to ensure UI updates
-    setTimeout(() => {
-      // Try to find the input by its placeholder text
-      const inputElements = document.querySelectorAll('input');
-      inputElements.forEach(input => {
-        if (input.placeholder && input.placeholder.includes('Enter item number')) {
-          input.value = itemNumberStr;
-          // Force an input event
-          const event = new Event('input', { bubbles: true });
-          input.dispatchEvent(event);
-        }
-      });
-
-      // 3. Also try to find it by name attribute
-      try {
-        const itemField = document.querySelector('input[name="artikelNr"]');
-        if (itemField) {
-          (itemField as HTMLInputElement).value = itemNumberStr;
-          const event = new Event('input', { bubbles: true });
-          itemField.dispatchEvent(event);
-          console.log('Updated item number field directly');
-        }
-      } catch (e) {
-        console.error('Error updating item number field:', e);
-      }
-
-      console.log('Form values after item update:', genericForm.getValues());
-    }, 10);
-
-    // Load orders for this item if needed
-    if (item.ArtikelNr) {
-      loadOrdersForItem(item.ArtikelNr);
-    }
-  }, [genericForm, setItemSearch, setItemDropdownOpen, loadOrdersForItem]);
-
   // Handle form submission for generic ticket
   const onSubmitGeneric = async (values: TicketFormValues) => {
     setIsSubmitting(true);
@@ -876,27 +780,9 @@ function AddTicketModal({
         ? parseInt(values.orderNumber)
         : bestellNr && bestellNr > 0 ? bestellNr : 0;
 
-      // Human error failsafe: verify the item number is valid for this order if an order is selected
-      let finalArtikelNr = artikelNr;
-      if (selectedOrderNumber && selectedOrderNumber > 0) {
-        // Find the matching order to verify the item number is correct
-        const matchingOrder = orders.find(o => o.BestellNr === selectedOrderNumber);
-        if (matchingOrder && matchingOrder.ArtikelNr && matchingOrder.ArtikelNr !== artikelNr) {
-          console.log(`Human error failsafe: Correcting item number from ${artikelNr} to ${matchingOrder.ArtikelNr} for order ${selectedOrderNumber}`);
-          finalArtikelNr = matchingOrder.ArtikelNr;
-
-          // Show a toast to inform the user of the correction
-          toast({
-            title: t('tickets.itemNumberCorrected', 'Item Number Corrected'),
-            description: t('tickets.itemNumberCorrectedDesc', 'The item number has been corrected to match the selected order.'),
-            variant: "default",
-          });
-        }
-      }
-
       // Create a new ticket with the form values
       const newTicket = {
-        artikelNr: finalArtikelNr,
+        artikelNr,
         bestellNr: selectedOrderNumber,
         comment: values.comment,
         byUser: 'System User',
@@ -915,7 +801,7 @@ function AddTicketModal({
 
       // Invalidate specific item tickets
       queryClient.invalidateQueries({
-        queryKey: [`/api/tickets/by-itemnr/${finalArtikelNr}`]
+        queryKey: [`/api/tickets/by-itemnr/${artikelNr}`]
       });
 
       // If an order number was provided, invalidate orders grouped to update ticket counts
@@ -1067,6 +953,266 @@ function AddTicketModal({
       </Form>
     );
   }, [genericForm, genericFormSubmitHandler, t, ticket, resetFormValues, onClose, isSubmitting]);
+
+  // Function to render the order-specific form
+  const renderOrderForm = React.useCallback(() => {
+    return (
+      <Form {...orderForm}>
+        <form onSubmit={orderForm.handleSubmit(orderFormSubmitHandler)} className="space-y-6">
+          <div className="bg-muted/50 rounded-lg p-4 mb-2">
+            <div className="text-xs text-muted-foreground font-medium">{t('tickets.formItemNumber', 'Item Number')}</div>
+            <div className="text-sm font-mono font-medium mt-1">#{artikelNr}</div>
+          </div>
+
+          {/* Order selection dropdown - show in both modes but with different behavior */}
+          <div className="mb-4" ref={orderDropdownRef}>
+            <div className="flex justify-between items-center">
+              <div className="text-sm font-medium mb-1">
+                {isOrderMode
+                  ? t('orders.selectOrder', 'Select Order (Optional)')
+                  : t('orders.searchOrders', 'Search Orders')}
+              </div>
+              {isLoadingOrders && (
+                <div className="text-xs text-muted-foreground animate-pulse">
+                  {t('common.loading', 'Loading...')}
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <div className="mb-1">
+                <Input
+                  type="text"
+                  placeholder={isOrderMode
+                    ? t('orders.searchRelatedOrders', 'Search related orders...')
+                    : t('orders.searchAllOrders', 'Search order #, item #, or description...')}
+                  value={orderSearch}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setOrderSearch(newValue);
+
+                    // Open dropdown if input not empty
+                    if (newValue.trim()) {
+                      setOrderDropdownOpen(true);
+                    }
+
+                    // If we're not in order mode and this is a significant change to search term
+                    // trigger filtering or loading immediately
+                    if (!isOrderMode && newValue.trim().length >= 3) {
+                      // Clear any existing debounce timer
+                      if (debounceTimerRef.current) {
+                        clearTimeout(debounceTimerRef.current);
+                      }
+
+                      // Set a small debounce to prevent too many searches
+                      debounceTimerRef.current = setTimeout(() => {
+                        // Show loading indicator
+                        setIsLoadingOrders(true);
+
+                        // Use OrdersService search method for consistent behavior
+                        OrdersService.searchOrders(newValue)
+                          .then(results => {
+                            safeSetOrders(results);
+                          })
+                          .catch(error => {
+                            console.error("Failed to search orders:", error);
+                            safeSetOrders([]);
+                          })
+                          .finally(() => {
+                            setIsLoadingOrders(false);
+                          });
+                      }, 300); // 300ms debounce
+                    } else if (newValue.trim() === '') {
+                      // Clear results if search is empty
+                      safeSetOrders([]);
+                    }
+                  }}
+                  onFocus={() => {
+                    // Open dropdown if we have orders and input has content
+                    if ((orders.length > 0 || orderCache.has('all-orders')) && orderSearch.trim()) {
+                      setOrderDropdownOpen(true);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    // Handle Enter key to select first order if possible
+                    if (e.key === 'Enter' && orders.length > 0 && orderDropdownOpen) {
+                      e.preventDefault();
+
+                      // Select the first order
+                      const firstOrder = orders[0];
+
+                      if (isOrderMode) {
+                        // Set to the order form
+                        orderForm.setValue('orderNumber', String(firstOrder.BestellNr));
+                        loadExistingTicketsByOrder(firstOrder.BestellNr);
+                      } else {
+                        // Set to the generic form
+                        genericForm.setValue('bestellNr', firstOrder.BestellNr);
+                        genericForm.setValue('artikelNr', firstOrder.ArtikelNr);
+                        loadExistingTicketsByOrder(firstOrder.BestellNr);
+                      }
+
+                      // Clear search and close dropdown
+                      setOrderSearch('');
+                      setOrderDropdownOpen(false);
+                    }
+                  }}
+                />
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-10 px-3"
+                onClick={() => {
+                  setOrderDropdownOpen(!orderDropdownOpen);
+                  if (!orderDropdownOpen && orders.length === 0) {
+                    loadAllOrders();
+                  }
+                }}
+              >
+                <ChevronDown className="h-4 w-4" />
+                <span className="sr-only">{t('common.toggle', 'Toggle')}</span>
+              </Button>
+            </div>
+
+            {/* Dropdown with filtered orders */}
+            {orderDropdownOpen && (
+              <div className="absolute left-0 z-50 w-full mt-1 bg-popover rounded-md border shadow-lg max-h-[280px] overflow-auto">
+                {isLoadingOrders ? (
+                  <div className="flex items-center justify-center p-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-2"></div>
+                    <span className="text-sm">{t('common.loading', 'Loading...')}</span>
+                  </div>
+                ) : orders.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    {orderSearch.trim() ?
+                      t('orders.noMatchingOrders', 'No matching orders found for "{{search}}"', { search: orderSearch }) :
+                      t('orders.noOrdersAvailable', 'No orders available')}
+                  </div>
+                ) : (
+                  <div className="p-1">
+                    {orders.slice(0, 30).map((order, index) => (
+                      <OrderItemWithArticle
+                        key={`order-${order.BestellNr}-${order.ArtikelNr}-${index}`}
+                        order={order}
+                        index={index}
+                        onClick={() => {
+                          // Clear search text
+                          setOrderSearch('');
+
+                          // Close dropdown
+                          setOrderDropdownOpen(false);
+
+                          if (isOrderMode) {
+                            // Set order form values
+                            orderForm.setValue('orderNumber', String(order.BestellNr));
+                          } else {
+                            // Set generic form values for both order and item
+                            genericForm.setValue('bestellNr', order.BestellNr);
+                            genericForm.setValue('artikelNr', order.ArtikelNr);
+                            setIsItemFieldDisabled(true);
+                          }
+
+                          // Load tickets for this order
+                          loadExistingTicketsByOrder(order.BestellNr);
+                        }}
+                      />
+                    ))}
+
+                    {orders.length > 30 && (
+                      <div className="p-2 text-center text-xs text-muted-foreground border-t">
+                        {t('common.showingLimited', 'Showing 30 of {{total}} results. Refine your search to see more specific results.',
+                          { total: orders.length })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isOrderMode ? (
+              <div className="text-xs text-muted-foreground mt-1">
+                {t('orders.searchRelatedOrdersHint', 'Search for orders related to item #{{artikelNr}}',
+                  { artikelNr: artikelNr })}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground mt-1">
+                {t('orders.searchOrdersHint', 'Search by order number, item number, or description')}
+              </div>
+            )}
+          </div>
+
+          <FormField
+            control={orderForm.control}
+            name="comment"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('tickets.comment', 'Comment')}</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder={t('tickets.enterDetailsPlaceholder', 'Enter details about the issue or request')}
+                    className="min-h-[120px]"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t('tickets.provideDescriptionHelp', 'Please provide a clear description of the issue or request')}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Always render the container for existing tickets to maintain hook order */}
+          <div style={{ display: showExistingTickets ? 'block' : 'none' }}>
+            {renderExistingTickets()}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                resetFormValues();
+                onClose();
+              }}
+            >
+              {t('common.cancel', 'Cancel')}
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting
+                ? t('common.creating', 'Creating...')
+                : t('tickets.createTicket', 'Create Ticket')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Form>
+    );
+  }, [
+    artikelNr,
+    orderForm,
+    orderFormSubmitHandler,
+    orderDropdownRef,
+    t,
+    setOrderSearch,
+    setOrderDropdownOpen,
+    loadExistingTicketsByOrder,
+    setShowExistingTickets,
+    orders,
+    orderDropdownOpen,
+    isLoadingOrders,
+    orderSearch,
+    renderExistingTickets,
+    resetFormValues,
+    onClose,
+    isSubmitting,
+    showExistingTickets
+  ]);
 
   // Function to render the generic form
   const renderGenericForm = React.useCallback(() => {
@@ -1243,10 +1389,25 @@ function AddTicketModal({
                       <div className="p-1">
                         {items.map(item => (
                           <div
-                            key={`item-${item.ArtikelNr}`}
-                            className="flex items-center justify-between px-4 py-2 text-sm cursor-pointer hover:bg-accent"
-                            onClick={() => handleItemSelection(item)}
-                          >
+                            key={item.ArtikelNr}
+                            className="flex items-start justify-between p-2 text-sm hover:bg-muted rounded-sm cursor-pointer"
+                            onClick={() => {
+                              field.onChange(item.ArtikelNr);
+                              setItemDropdownOpen(false);
+
+                              // Explicitly fetch orders related to this item
+                              if (item.ArtikelNr) {
+                                setIsLoadingOrders(true);
+                                loadOrdersForItem(item.ArtikelNr)
+                                  .then(ordersData => {
+                                    // Auto-select if there's only one order
+                                    if (ordersData.length === 1) {
+                                      genericForm.setValue('bestellNr', ordersData[0].BestellNr);
+                                      loadExistingTicketsByOrder(ordersData[0].BestellNr);
+                                    }
+                                  });
+                              }
+                            }}>
                             <div>
                               <div className="font-medium">{item.ArtikelNr}</div>
                               <div className="text-xs text-muted-foreground line-clamp-1">{item.Artikel}</div>
@@ -1285,10 +1446,114 @@ function AddTicketModal({
                           type="text"
                           disabled={isEditMode}
                           onChange={(e) => {
-                            // Input change handler code
                             const value = e.target.value;
                             const numericValue = parseInt(value, 10);
-                            field.onChange(!isNaN(numericValue) ? numericValue : 0);
+
+                            // Only update if it's a valid number or empty
+                            if (!isNaN(numericValue) || value === '') {
+                              // Update the form value
+                              field.onChange(!isNaN(numericValue) ? numericValue : 0);
+                              setOrderSearch(value);
+
+                              // Debug logging
+                              console.log(`Order search value: ${value} (${typeof value})`);
+
+                              // Open dropdown for valid search with 3+ digits
+                              if (value.length >= 3) {
+                                setOrderDropdownOpen(true);
+
+                                // Direct API call for this specific order number
+                                if (numericValue > 0) {
+                                  // Clear any existing debounce timer
+                                  if (debounceTimerRef.current) {
+                                    clearTimeout(debounceTimerRef.current);
+                                  }
+
+                                  // Show loading indicator immediately
+                                  setIsLoadingOrders(true);
+
+                                  // Set new debounce timer for order search
+                                  debounceTimerRef.current = setTimeout(() => {
+                                    console.log(`Debounced search for order: ${numericValue}`);
+
+                                    OrdersService.getOpenOrdersByBestellNr(numericValue)
+                                      .then(matchingOrders => {
+                                        console.log(`Received ${matchingOrders.length} orders for direct search ${numericValue}`);
+
+                                        if (matchingOrders.length > 0) {
+                                          // Found direct matches
+                                          safeSetOrders(matchingOrders);
+
+                                          // Auto-select if there's only one order
+                                          if (matchingOrders.length === 1) {
+                                            const orderItem = matchingOrders[0];
+                                            console.log(`Auto-selecting single match: Order ${orderItem.BestellNr}, Item ${orderItem.ArtikelNr}`);
+
+                                            // Set the item and disable the field
+                                            genericForm.setValue('artikelNr', orderItem.ArtikelNr);
+                                            setIsItemFieldDisabled(true);
+
+                                            // Load existing tickets
+                                            loadExistingTicketsByOrder(orderItem.BestellNr);
+                                          }
+                                        } else {
+                                          console.log(`No orders found for ${numericValue}, loading all orders for search`);
+                                          // If specific search fails, load all orders as fallback
+                                          loadAllOrders();
+                                        }
+                                      })
+                                      .catch(error => {
+                                        console.error(`Error searching for order ${numericValue}:`, error);
+                                        loadAllOrders();
+                                      })
+                                      .finally(() => {
+                                        setIsLoadingOrders(false);
+                                      });
+                                  }, 500); // 500ms debounce time
+                                } else {
+                                  // If we don't have orders loaded yet, load all orders
+                                  if (orders.length === 0) {
+                                    console.log('No orders loaded, loading all orders...');
+                                    loadAllOrders();
+                                  }
+                                }
+
+                                // Find item for this order if it exists in our orders array
+                                if (numericValue > 0) {
+                                  const itemForOrder = findItemForOrder(numericValue);
+                                  if (itemForOrder) {
+                                    genericForm.setValue('artikelNr', itemForOrder);
+                                    setIsItemFieldDisabled(true);
+                                  } else {
+                                    // If no matching item found, reset item field
+                                    genericForm.setValue('artikelNr', 0);
+                                    setIsItemFieldDisabled(false);
+                                  }
+                                }
+                              } else {
+                                // If order number field is cleared or too short, enable item field
+                                setOrderDropdownOpen(false);
+                                setShowExistingTickets(false);
+
+                                // Clear the artikelNr field and enable it when order number is cleared
+                                genericForm.setValue('artikelNr', 0);
+                                setIsItemFieldDisabled(false);
+                              }
+                            }
+                          }}
+                          // Add this onBlur handler to only look up tickets when the user finishes typing
+                          onBlur={() => {
+                            const value = field.value;
+                            // Only load existing tickets when the field loses focus and has a valid value
+                            if (value && !isNaN(value) && value > 0) {
+                              loadExistingTicketsByOrder(value);
+                            }
+                          }}
+                          onClick={() => {
+                            setOrderDropdownOpen(!orderDropdownOpen);
+                            if (orderDropdownOpen === false && orders.length === 0) {
+                              loadAllOrders();
+                            }
                           }}
                         />
                       </div>
@@ -1297,290 +1562,86 @@ function AddTicketModal({
                         variant="ghost"
                         className="h-10 px-3"
                         disabled={isEditMode}
-                      >
+                        onClick={() => {
+                          setOrderDropdownOpen(!orderDropdownOpen);
+                          if (orderDropdownOpen === false && orders.length === 0) {
+                            loadAllOrders();
+                          }
+                        }}>
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       </Button>
                     </div>
                   </FormControl>
-                  <FormMessage />
-                </div>
-              </FormItem>
-            )}
-          />
 
-          <FormField
-            control={genericForm.control}
-            name="comment"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('tickets.comment', 'Comment')}</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder={t('tickets.enterDetailsPlaceholder', 'Enter details about the issue or request')}
-                    className="min-h-[120px]"
-                    {...field}
-                  />
-                </FormControl>
+                  {/* Always render the dropdown container to maintain hook order */}
+                  <div style={{ display: orderDropdownOpen ? 'block' : 'none' }}
+                    className="absolute top-[calc(100%+4px)] left-0 z-10 w-full max-h-40 overflow-auto rounded-md bg-popover border shadow-md">
+                    {isLoadingOrders ? (
+                      <div className="p-2 text-center text-sm">{t('common.loadingOrders', 'Loading orders...')}</div>
+                    ) : orders.filter(order => {
+                      // Convert both to strings for proper comparison 
+                      if (!orderSearch) return true;
+
+                      const orderNumStr = String(order.BestellNr);
+                      const searchStr = String(orderSearch);
+
+                      // Debug the search
+                      console.log(`Comparing order ${orderNumStr} with search ${searchStr}`);
+
+                      // Allow exact matches OR matches at the beginning of the order number
+                      return orderNumStr === searchStr || orderNumStr.startsWith(searchStr);
+                    }).length === 0 ? (
+                      <div className="p-2 text-center text-sm">{t('tickets.noOrdersFound', 'No orders found')}</div>
+                    ) : (
+                      <div className="p-1">
+                        {orders
+                          .filter(order => {
+                            // Convert both to strings for proper comparison
+                            if (!orderSearch) return true;
+
+                            const orderNumStr = String(order.BestellNr);
+                            const searchStr = String(orderSearch);
+
+                            // Allow exact matches OR matches at the beginning of the order number
+                            return orderNumStr === searchStr || orderNumStr.startsWith(searchStr);
+                          })
+                          .slice(0, 20) // Limit to maximum 20 results for performance
+                          .map((order, index) => (
+                            <OrderItemWithArticle
+                              key={`order-${order.BestellNr}-${order.ArtikelNr}-${index}`}
+                              order={order}
+                              index={index}
+                              onClick={() => {
+                                field.onChange(order.BestellNr);
+                                setOrderDropdownOpen(false);
+
+                                // Ensure we always update the item number and disable the field
+                                const currentItem = genericForm.getValues('artikelNr');
+
+                                // Always set the item value to match the order and disable the field
+                                genericForm.setValue('artikelNr', order.ArtikelNr);
+                                setIsItemFieldDisabled(true);
+
+                                // Load existing tickets for this order
+                                loadExistingTicketsByOrder(order.BestellNr);
+                              }}
+                            />
+                          ))
+                        }
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <FormDescription>
-                  {t('tickets.provideDescriptionHelp', 'Please provide a clear description of the issue or request')}
+                  {t('tickets.orderNumberOptional', 'Order number is optional. If provided, tickets will be linked to the specific order.')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          {/* Container for existing tickets */}
-          <div style={{ display: showExistingTickets ? 'block' : 'none' }}>
-            {renderExistingTickets()}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                resetFormValues();
-                onClose();
-              }}
-            >
-              {t('common.cancel', 'Cancel')}
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting
-                ? t('common.creating', 'Creating...')
-                : t('tickets.createTicket', 'Create Ticket')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Form>
-    );
-  }, [
-    genericForm,
-    genericFormSubmitHandler,
-    isItemFieldDisabled,
-    t,
-    resetFormValues,
-    onClose,
-    isSubmitting,
-    showExistingTickets,
-    renderExistingTickets
-  ]);
-
-  // Function to render the order-specific form
-  const renderOrderForm = React.useCallback(() => {
-    return (
-      <Form {...orderForm}>
-        <form onSubmit={orderForm.handleSubmit(orderFormSubmitHandler)} className="space-y-6">
-          <div className="bg-muted/50 rounded-lg p-4 mb-2">
-            <div className="text-xs text-muted-foreground font-medium">{t('tickets.formItemNumber', 'Item Number')}</div>
-            <div className="text-sm font-mono font-medium mt-1">#{artikelNr}</div>
-          </div>
-
-          {/* Order selection dropdown - show in both modes but with different behavior */}
-          <div className="mb-4" ref={orderDropdownRef}>
-            <div className="flex justify-between items-center">
-              <div className="text-sm font-medium mb-1">
-                {isOrderMode
-                  ? t('orders.selectOrder', 'Select Order (Optional)')
-                  : t('orders.searchOrders', 'Search Orders')}
-              </div>
-              {isLoadingOrders && (
-                <div className="text-xs text-muted-foreground animate-pulse">
-                  {t('common.loading', 'Loading...')}
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <div className="mb-1">
-                <Input
-                  type="text"
-                  placeholder={isOrderMode
-                    ? t('orders.searchRelatedOrders', 'Search related orders...')
-                    : t('orders.searchAllOrders', 'Search order #, item #, or description...')}
-                  value={orderSearch}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setOrderSearch(newValue);
-
-                    // Open dropdown if input not empty
-                    if (newValue.trim()) {
-                      setOrderDropdownOpen(true);
-                    }
-                  }}
-                  onFocus={() => {
-                    // Open dropdown if we have orders and input has content
-                    if ((orders.length > 0 || orderCache.has('all-orders')) && orderSearch.trim()) {
-                      setOrderDropdownOpen(true);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    // Handle Enter key to select first order if possible
-                    if (e.key === 'Enter' && orders.length > 0 && orderDropdownOpen) {
-                      e.preventDefault();
-
-                      // Select the first order
-                      const firstOrder = orders[0];
-
-                      if (isOrderMode) {
-                        // Set to the order form
-                        orderForm.setValue('orderNumber', String(firstOrder.BestellNr));
-                        loadExistingTicketsByOrder(firstOrder.BestellNr);
-                      } else {
-                        // Set to the generic form
-                        genericForm.setValue('bestellNr', firstOrder.BestellNr);
-                        genericForm.setValue('artikelNr', firstOrder.ArtikelNr);
-                        loadExistingTicketsByOrder(firstOrder.BestellNr);
-                      }
-
-                      // Clear search and close dropdown
-                      setOrderSearch('');
-                      setOrderDropdownOpen(false);
-                    }
-                  }}
-                />
-              </div>
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-10 px-3"
-                onClick={() => {
-                  setOrderDropdownOpen(!orderDropdownOpen);
-                  if (!orderDropdownOpen && orders.length === 0) {
-                    loadAllOrders();
-                  }
-                }}
-              >
-                <ChevronDown className="h-4 w-4" />
-                <span className="sr-only">{t('common.toggle', 'Toggle')}</span>
-              </Button>
-            </div>
-
-            {/* Dropdown with filtered orders */}
-            {orderDropdownOpen && (
-              <div className="absolute left-0 z-50 w-full mt-1 bg-popover rounded-md border shadow-lg max-h-[280px] overflow-auto">
-                {isLoadingOrders ? (
-                  <div className="flex items-center justify-center p-4">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-2"></div>
-                    <span className="text-sm">{t('common.loading', 'Loading...')}</span>
-                  </div>
-                ) : orders.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-muted-foreground">
-                    {orderSearch.trim() ?
-                      t('orders.noMatchingOrders', 'No matching orders found for "{{search}}"', { search: orderSearch }) :
-                      t('orders.noOrdersAvailable', 'No orders available')}
-                  </div>
-                ) : (
-                  <div className="p-1">
-                    {orders.slice(0, 30).map((order, index) => (
-                      <OrderItemWithArticle
-                        key={`order-${order.BestellNr}-${order.ArtikelNr}-${index}`}
-                        order={order}
-                        index={index}
-                        onClick={() => {
-                          // Add debug log
-                          console.log('Order item clicked in generic form:', order);
-                          console.log('Current generic form values before update:', genericForm.getValues());
-
-                          // Clear search text
-                          setOrderSearch('');
-
-                          // Close dropdown
-                          setOrderDropdownOpen(false);
-
-                          // Set generic form values for both order and item
-                          genericForm.setValue('bestellNr', order.BestellNr);
-                          genericForm.setValue('artikelNr', order.ArtikelNr);
-
-                          // Also directly update the DOM inputs to ensure UI updates
-                          setTimeout(() => {
-                            // For order number
-                            const orderInputs = document.querySelectorAll('input');
-                            orderInputs.forEach(input => {
-                              if (input.placeholder && (
-                                input.placeholder.includes('Enter order number') ||
-                                input.placeholder.includes('Search all orders'))) {
-                                input.value = String(order.BestellNr);
-                                // Force an input event
-                                const event = new Event('input', { bubbles: true });
-                                input.dispatchEvent(event);
-                              }
-                            });
-
-                            // Try finding by name attribute as well
-                            try {
-                              const orderField = document.querySelector('input[name="bestellNr"]');
-                              if (orderField) {
-                                (orderField as HTMLInputElement).value = String(order.BestellNr);
-                                const event = new Event('input', { bubbles: true });
-                                orderField.dispatchEvent(event);
-                              }
-                            } catch (e) {
-                              console.error('Error updating order field:', e);
-                            }
-
-                            // For item number as well
-                            const itemInputs = document.querySelectorAll('input');
-                            itemInputs.forEach(input => {
-                              if (input.placeholder && input.placeholder.includes('Enter item number')) {
-                                input.value = String(order.ArtikelNr);
-                                // Force an input event
-                                const event = new Event('input', { bubbles: true });
-                                input.dispatchEvent(event);
-                              }
-                            });
-
-                            // Try finding by name attribute as well
-                            try {
-                              const itemField = document.querySelector('input[name="artikelNr"]');
-                              if (itemField) {
-                                (itemField as HTMLInputElement).value = String(order.ArtikelNr);
-                                const event = new Event('input', { bubbles: true });
-                                itemField.dispatchEvent(event);
-                              }
-                            } catch (e) {
-                              console.error('Error updating item field:', e);
-                            }
-
-                            console.log('Generic form values after update:', genericForm.getValues());
-                          }, 10);
-
-                          setIsItemFieldDisabled(true);
-                          loadExistingTicketsByOrder(order.BestellNr);
-                        }}
-                      />
-                    ))}
-
-                    {orders.length > 30 && (
-                      <div className="p-2 text-center text-xs text-muted-foreground border-t">
-                        {t('common.showingLimited', 'Showing 30 of {{total}} results. Refine your search to see more specific results.',
-                          { total: orders.length })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isOrderMode ? (
-              <div className="text-xs text-muted-foreground mt-1">
-                {t('orders.searchRelatedOrdersHint', 'Search for orders related to item #{{artikelNr}}',
-                  { artikelNr: artikelNr })}
-              </div>
-            ) : (
-              <div className="text-xs text-muted-foreground mt-1">
-                {t('orders.searchOrdersHint', 'Search by order number, item number, or description')}
-              </div>
-            )}
-          </div>
-
           <FormField
-            control={orderForm.control}
+            control={genericForm.control}
             name="comment"
             render={({ field }) => (
               <FormItem>
@@ -1629,19 +1690,32 @@ function AddTicketModal({
       </Form>
     );
   }, [
-    artikelNr,
-    orderForm,
-    orderFormSubmitHandler,
-    orderDropdownRef,
+    genericForm,
+    genericFormSubmitHandler,
+    isItemFieldDisabled,
     t,
-    setOrderSearch,
-    setOrderDropdownOpen,
+    itemDropdownRef,
+    itemDropdownOpen,
+    items,
+    isLoadingItems,
+    itemSearch,
+    setItemDropdownOpen,
+    setItemSearch,
+    loadOrdersForItem,
     loadExistingTicketsByOrder,
+    toast,
     setShowExistingTickets,
-    orders,
+    isEditMode,
+    orderDropdownRef,
     orderDropdownOpen,
+    orders,
     isLoadingOrders,
     orderSearch,
+    setOrderDropdownOpen,
+    setOrderSearch,
+    findItemForOrder,
+    setIsItemFieldDisabled,
+    loadAllOrders,
     renderExistingTickets,
     resetFormValues,
     onClose,
@@ -1649,7 +1723,6 @@ function AddTicketModal({
     showExistingTickets
   ]);
 
-  // Complete the component with the return statement
   return (
     <Dialog
       open={isOpen}

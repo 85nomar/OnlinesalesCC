@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +7,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { Ticket } from "@/shared/types";
-import { TicketsService } from "@/services/api";
+import type { Ticket } from "@/shared/schema";
+import { TicketsService } from "@/services/tickets.service";
 import { OrdersService } from "@/services/orders.service";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, X, Ticket as TicketIcon, Edit, Trash, Plus } from "lucide-react";

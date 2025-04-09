@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { OrdersService } from "@/services/api";
 import { TicketsService } from "@/services/tickets.service";
 import DataTable from "@/components/DataTable";
-import { OpenOrder } from "@/shared/types";
 import DateFormatter from "@/components/DateFormatter";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +29,7 @@ export default function AllOrdersPage() {
 
   // State for global search
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
-  const [globalSearchResults, setGlobalSearchResults] = useState<OpenOrder[]>([]);
+  const [globalSearchResults, setGlobalSearchResults] = useState<OpenOrders[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   // Fetch all orders with pagination
@@ -196,7 +195,7 @@ export default function AllOrdersPage() {
   };
 
   // Handle row click to navigate to order details
-  const handleRowClick = (order: OpenOrder) => {
+  const handleRowClick = (order: OpenOrders) => {
     if (!order || !order.ArtikelNr) {
       console.warn('Unable to navigate - invalid order data:', order);
       return;
@@ -208,7 +207,7 @@ export default function AllOrdersPage() {
   const columns = [
     {
       header: t('orders.orderNumber'),
-      accessor: (row: OpenOrder) => row?.BestellNr,
+      accessor: (row: OpenOrders) => row?.BestellNr,
       cell: (value: number) => (
         <span className="font-mono">{value || '-'}</span>
       ),
@@ -216,7 +215,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.date'),
-      accessor: (row: OpenOrder) => row?.Erstelldatum,
+      accessor: (row: OpenOrders) => row?.Erstelldatum,
       cell: (value: string) => (
         <DateFormatter date={value} showOriginalOnError withTime={true} />
       ),
@@ -224,7 +223,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.itemNumber'),
-      accessor: (row: OpenOrder) => row?.ArtikelNr,
+      accessor: (row: OpenOrders) => row?.ArtikelNr,
       cell: (value: number) => (
         <span className="font-mono">{value || '-'}</span>
       ),
@@ -232,7 +231,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.brand'),
-      accessor: (row: OpenOrder) => row?.Hrs,
+      accessor: (row: OpenOrders) => row?.Hrs,
       cell: (value: string) => (
         <span>{value || '-'}</span>
       ),
@@ -240,7 +239,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.item'),
-      accessor: (row: OpenOrder) => row?.Artikel,
+      accessor: (row: OpenOrders) => row?.Artikel,
       cell: (value: string) => (
         <span className="max-w-xs truncate block">{value || '-'}</span>
       ),
@@ -248,7 +247,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.productGroup'),
-      accessor: (row: OpenOrder) => row?.WgrNo,
+      accessor: (row: OpenOrders) => row?.WgrNo,
       cell: (value: string) => (
         <span className="font-mono text-xs">{value || '-'}</span>
       ),
@@ -256,7 +255,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.quantity'),
-      accessor: (row: OpenOrder) => row?.Anzahl,
+      accessor: (row: OpenOrders) => row?.Anzahl,
       cell: (value: number) => (
         <span>{value ?? 0}</span>
       ),
@@ -264,8 +263,8 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.tickets', 'Tickets'),
-      accessor: (row: OpenOrder) => row?.BestellNr ? ticketCounts[row.BestellNr] || 0 : 0,
-      cell: (value: number, row: OpenOrder) => (
+      accessor: (row: OpenOrders) => row?.BestellNr ? ticketCounts[row.BestellNr] || 0 : 0,
+      cell: (value: number, row: OpenOrders) => (
         <div className="flex items-center justify-center">
           <button
             onClick={(e) => {
@@ -289,7 +288,7 @@ export default function AllOrdersPage() {
     },
     {
       header: t('orders.status'),
-      accessor: (row: OpenOrder) => row?.BestellStatus,
+      accessor: (row: OpenOrders) => row?.BestellStatus,
       cell: (value: string) => {
         if (!value) return <span className="text-muted-foreground">-</span>;
 

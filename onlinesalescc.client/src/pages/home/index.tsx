@@ -21,7 +21,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import DateFormatter from "@/components/DateFormatter";
 import { getDeliveryDateStatus } from "@/lib/utils";
-import { OpenOrderGrouped } from "@/shared/types";
 
 // Define interface for simplified paginated response - matches server's actual return format
 interface SimpleResponse<T> {
@@ -30,7 +29,7 @@ interface SimpleResponse<T> {
 }
 
 // Define type for orders response
-type OrdersResponse = OpenOrderGrouped[] | SimpleResponse<OpenOrderGrouped>;
+type OrdersResponse = OpenOrdersGrouped[] | SimpleResponse<OpenOrdersGrouped>;
 
 /**
  * Ticket Monthly Trend Chart Component - Redesigned Version
@@ -306,7 +305,7 @@ const WeeklyOrdersTrendChart = ({ orders, isLoading }: {
     }
 
     // Count orders per week
-    normalizedOrders.forEach((order: OpenOrderGrouped) => {
+    normalizedOrders.forEach((order: OpenOrdersGrouped) => {
       if (!order.Erstelldatum) return;
 
       const orderDate = new Date(order.Erstelldatum);
@@ -384,11 +383,11 @@ const UpcomingDeliveries = ({
 
     console.log("UpcomingDeliveries - normalizedOrders:", normalizedOrders);
     console.log("UpcomingDeliveries - additionalInfo with delivery dates:",
-      additionalInfo.filter(info => info.newDeliveryDate || info.newDeliveryDate));
+      additionalInfo.filter(info => info.newDeliveryDate || info.NewDeliveryDate));
 
     // Check for different possible property names in additionalInfo
     const hasNewDeliveryDate = (info: any) =>
-      info.newDeliveryDate;
+      (info.newDeliveryDate || info.NewDeliveryDate);
 
     // Get all orders with delivery dates
     const ordersWithDates = additionalInfo
@@ -399,7 +398,7 @@ const UpcomingDeliveries = ({
         const order = normalizedOrders.find(order => order.ArtikelNr === artikelNr);
 
         // Get the delivery date regardless of property casing
-        const deliveryDate = info.newDeliveryDate || info.newDeliveryDate;
+        const deliveryDate = info.newDeliveryDate || info.NewDeliveryDate;
 
         return {
           artikelNr: artikelNr,
@@ -712,14 +711,14 @@ export default function HomeDashboard() {
               <div className="space-y-4">
                 <div className="text-3xl font-bold">
                   {/* Check both possible property name formats */}
-                  {additionalInfo.filter(info => info.newDeliveryDate).length}
+                  {additionalInfo.filter(info => info.newDeliveryDate || info.NewDeliveryDate).length}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col p-2 bg-muted/30 rounded-md">
                     <span className="text-xs text-muted-foreground">{t('dashboard.thisWeek')}</span>
                     <span className="text-xl font-bold">
                       {additionalInfo.filter(info => {
-                        const deliveryDate = info.newDeliveryDate;
+                        const deliveryDate = info.newDeliveryDate || info.NewDeliveryDate;
                         if (!deliveryDate) return false;
 
                         const date = new Date(deliveryDate);
@@ -741,8 +740,8 @@ export default function HomeDashboard() {
                     <span className="text-xs text-muted-foreground">{t('dashboard.modified')}</span>
                     <span className="text-xl font-bold">
                       {additionalInfo.filter(info => {
-                        const newDate = info.newDeliveryDate;
-                        const originalDate = info.originalDeliveryDate;
+                        const newDate = info.newDeliveryDate || info.NewDeliveryDate;
+                        const originalDate = info.originalDeliveryDate || info.OriginalDeliveryDate;
                         return newDate && originalDate && newDate !== originalDate;
                       }).length}
                     </span>

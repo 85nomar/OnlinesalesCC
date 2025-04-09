@@ -5,9 +5,9 @@
  * It automatically handles different data sources based on the API configuration.
  */
 
+import { CURRENT_DATA_SOURCE, DataSource, isRealApi } from '@/config/api.config';
+import { Ticket } from '@/shared/schema';
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { Ticket } from '@/shared/types';
-import { API_BASE_URL } from '@/config/api.config';
 
 // Re-export services for easy access
 export { TicketsService } from './tickets.service';
@@ -22,7 +22,7 @@ const defaultOptions: RequestInit = {
 };
 
 // Define debounce timers for different API endpoints
-const debounceTimers: Record<string, number> = {};
+const debounceTimers: Record<string, NodeJS.Timeout> = {};
 const MIN_SEARCH_LENGTH = 3;
 const DEBOUNCE_TIME = 500; // ms
 
@@ -44,7 +44,7 @@ export function debounceRequest<T>(
     }
 
     // Create a new timer
-    debounceTimers[key] = window.setTimeout(() => {
+    debounceTimers[key] = setTimeout(() => {
       fn()
         .then(resolve)
         .catch(reject)
@@ -91,7 +91,7 @@ export function isValidNumberSearch(value: number | string | null | undefined, m
 
 // Create Axios instance with default config
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL || '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -397,23 +397,6 @@ export const apiClient = {
     }
 
     return response.data;
-  },
-
-  /**
-   * Get tickets by order number
-   * 
-   * @param bestellNr The order number to get tickets for
-   * @returns Promise with tickets
-   */
-  getTicketsByBestellNr: (bestellNr: number): Promise<Ticket[]> => {
-    if (!bestellNr || isNaN(bestellNr)) {
-      console.warn(`Invalid order number provided: ${bestellNr}`);
-      return Promise.resolve([]);
-    }
-
-    console.log(`Looking up tickets for order: ${bestellNr}`);
-    // Fix: Use the correct API endpoint path
-    return apiClient.get<Ticket[]>(`${API_BASE_URL}/tickets/by-ordernr/${bestellNr}`);
   }
 };
 
@@ -445,4 +428,17 @@ async function handleErrorResponse(response: Response): Promise<never> {
     // If we can't even read the response
     throw new Error(`API Error: ${response.status} - ${response.statusText}. Unable to read response.`);
   }
+}
+
+/**
+ * Helper function for returning mock data based on endpoint
+ * 
+ * @param endpoint API endpoint
+ * @returns Mock data for the endpoint
+ */
+function getMockData<T>(endpoint: string): T {
+  // Since we're removing mock data, always return an empty result
+  // This should never be called since we're setting CURRENT_DATA_SOURCE to DataSource.REAL_API
+  console.warn('getMockData is called but mock data is no longer available');
+  return [] as unknown as T;
 }

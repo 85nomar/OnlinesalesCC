@@ -6,7 +6,7 @@
 
 import { apiClient } from './api';
 import { API_ENDPOINTS } from '@/config/api.config';
-import type { Ticket } from '@/shared/types';
+import type { Ticket } from '@/shared/schema';
 
 /**
  * Tickets service for handling ticket-related API calls
@@ -107,33 +107,24 @@ export const TicketsService = {
      * @param updates The partial ticket data to update
      * @returns Promise with the updated ticket
      */
-    async updateTicket(ticketId: string | number, updates: Partial<Omit<Ticket, 'id' | 'ticketId'>>): Promise<Ticket> {
+    async updateTicket(ticketId: number, updates: Partial<Omit<Ticket, 'id' | 'ticketId'>>): Promise<Ticket> {
         try {
-            // Extract numeric ID if ticketId is a string like "ticket-25"
-            let numericId: number;
-            if (typeof ticketId === 'string' && ticketId.includes('-')) {
-                const parts = ticketId.split('-');
-                numericId = parseInt(parts[1], 10);
-                if (isNaN(numericId)) {
-                    throw new Error(`Invalid ticket ID format: ${ticketId}`);
-                }
-            } else if (typeof ticketId === 'string') {
-                numericId = parseInt(ticketId, 10);
-                if (isNaN(numericId)) {
-                    throw new Error(`Invalid ticket ID format: ${ticketId}`);
-                }
-            } else {
-                numericId = ticketId;
+            // Get the existing ticket
+            const tickets = await this.getAllTickets();
+            const existingTicket = tickets.find(ticket => ticket.ticketId === ticketId);
+
+            if (!existingTicket) {
+                throw new Error(`Ticket with ID ${ticketId} not found`);
             }
 
-            // Create the updated ticket object
+            // Merge the existing ticket with the updates
             const updatedTicket = {
-                ticketId: numericId,
-                ...updates
+                ...existingTicket,
+                ...updates,
             };
 
-            // Use numeric ID for the API call
-            return await apiClient.put<Ticket>(`${API_ENDPOINTS.TICKETS}/${numericId}`, updatedTicket);
+            // Use ticketId (numeric) for the API call
+            return await apiClient.put<Ticket>(`${API_ENDPOINTS.TICKETS}/${ticketId}`, updatedTicket);
         } catch (error) {
             console.error(`Error updating ticket ${ticketId}:`, error);
             throw error; // Re-throw as this is a user-initiated action that needs feedback
@@ -146,27 +137,18 @@ export const TicketsService = {
      * @param ticketId The ticket ID to delete
      * @returns Promise indicating success
      */
-    async deleteTicket(ticketId: string | number): Promise<void> {
+    async deleteTicket(ticketId: number): Promise<void> {
         try {
-            // Extract numeric ID if ticketId is a string like "ticket-25"
-            let numericId: number;
-            if (typeof ticketId === 'string' && ticketId.includes('-')) {
-                const parts = ticketId.split('-');
-                numericId = parseInt(parts[1], 10);
-                if (isNaN(numericId)) {
-                    throw new Error(`Invalid ticket ID format: ${ticketId}`);
-                }
-            } else if (typeof ticketId === 'string') {
-                numericId = parseInt(ticketId, 10);
-                if (isNaN(numericId)) {
-                    throw new Error(`Invalid ticket ID format: ${ticketId}`);
-                }
-            } else {
-                numericId = ticketId;
+            // Get the ticket to verify it exists
+            const tickets = await this.getAllTickets();
+            const ticket = tickets.find(t => t.ticketId === ticketId);
+
+            if (!ticket) {
+                throw new Error(`Ticket with ID ${ticketId} not found`);
             }
 
-            // Use numeric ID for the API call
-            await apiClient.delete<void>(`${API_ENDPOINTS.TICKETS}/${numericId}`);
+            // Use ticketId directly for the API call
+            await apiClient.delete<void>(`${API_ENDPOINTS.TICKETS}/${ticketId}`);
         } catch (error) {
             console.error(`Error deleting ticket ${ticketId}:`, error);
             throw error; // Re-throw as this is a user-initiated action that needs feedback

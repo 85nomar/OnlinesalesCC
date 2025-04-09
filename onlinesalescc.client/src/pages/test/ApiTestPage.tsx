@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { apiClient } from "@/services/api";
 import { API_ENDPOINTS } from "@/config/api.config";
-import type { OpenOrder, OpenOrderGrouped, AlternativeItem } from "@/shared/types";
+import type { OpenOrders, OpenOrdersGrouped, AlternativeItem } from "@/shared/schema";
 
 export default function ApiTestPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -138,9 +138,6 @@ export default function ApiTestPage() {
     setResponse(null);
 
     const alternativeItem: AlternativeItem = {
-      orderArtikelNr: artikelNr,
-      alternativeArtikelNr: alternativeArtikelNr,
-      alternativeArtikel: alternativeArtikel,
       artikelNr: alternativeArtikelNr,
       artikel: alternativeArtikel
     };

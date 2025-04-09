@@ -5,7 +5,6 @@
  */
 
 import { apiClient } from './api';
-import { API_ENDPOINTS } from '@/config/api.config';
 
 interface SendNotificationParams {
   orderNumbers: number[] | 'all';
@@ -32,7 +31,7 @@ export const EmailService = {
    */
   async sendNotifications(params: SendNotificationParams): Promise<NotificationResponse> {
     // Make a POST request to the notifications endpoint
-    const response = await apiClient.post<NotificationResponse>(API_ENDPOINTS.NOTIFICATIONS_EMAIL, params);
+    const response = await apiClient.post<NotificationResponse>('/api/notifications/email', params);
     return response;
   }
 };

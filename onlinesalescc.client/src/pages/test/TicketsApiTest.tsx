@@ -1,11 +1,10 @@
-import React, { useState } from "react";
-import { TicketsService } from "@/services/api";
+import { useState } from "react";
+import { TicketsService } from "@/services/tickets.service";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
-import type { Ticket } from "@/shared/types";
+import type { Ticket } from "@/shared/schema";
 
 export default function TicketsApiTest() {
   const [isLoading, setIsLoading] = useState(false);
@@ -142,9 +141,9 @@ export default function TicketsApiTest() {
         <Card>
           <CardHeader>
             <CardTitle>API Endpoint Tests</CardTitle>
-            <CardFooter>
+            <CardDescription>
               Click the buttons below to test each API endpoint
-            </CardFooter>
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Button
@@ -197,9 +196,9 @@ export default function TicketsApiTest() {
         <Card>
           <CardHeader>
             <CardTitle>Response</CardTitle>
-            <CardFooter>
+            <CardDescription>
               API response will appear here
-            </CardFooter>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (

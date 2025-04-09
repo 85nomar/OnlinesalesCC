@@ -4,8 +4,7 @@ import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { OrdersService, OrdersAdditionalService } from "@/services/api";
 import DataTable from "@/components/DataTable";
-import { OpenOrder, OpenOrderGrouped, OrdersGroupedAdditional } from "@/shared/types";
-import { productGroups } from "@/services/productGroups";
+import type { OpenOrders, OpenOrdersGrouped } from "@/shared/schema";
 import { getDeliveryDateStatus } from "@/lib/utils";
 import DateFormatter from "@/components/DateFormatter";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +28,7 @@ export default function OpenOrdersPage() {
 
   // State for global search
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
-  const [globalSearchResults, setGlobalSearchResults] = useState<OpenOrderGrouped[]>([]);
+  const [globalSearchResults, setGlobalSearchResults] = useState<OpenOrdersGrouped[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   // Fetch open orders grouped data with pagination
@@ -46,12 +45,12 @@ export default function OpenOrdersPage() {
 
     // Determine if the response is the new paginated format
     if (Array.isArray(ordersResponse)) {
-      return ordersResponse as OpenOrderGrouped[];
+      return ordersResponse as OpenOrdersGrouped[];
     }
 
     // If response is the paginated object format
     if ('items' in ordersResponse) {
-      return ordersResponse.items as OpenOrderGrouped[];
+      return ordersResponse.items as OpenOrdersGrouped[];
     }
 
     return [];
@@ -138,7 +137,7 @@ export default function OpenOrdersPage() {
       }
 
       // Group the results by item number (ArtikelNr)
-      const groupedResults = new Map<number, OpenOrderGrouped>();
+      const groupedResults = new Map<number, OpenOrdersGrouped>();
 
       results.forEach(order => {
         if (!order.ArtikelNr) return;
@@ -150,11 +149,11 @@ export default function OpenOrdersPage() {
           existing.Anzahl = (existing.Anzahl || 0) + 1;
         } else {
           // Otherwise, create a new grouped entry with required fields
-          const newGroupedOrder: OpenOrderGrouped = {
+          const newGroupedOrder: OpenOrdersGrouped = {
             ArtikelNr: order.ArtikelNr,
             Artikel: order.Artikel || '',
             Hrs: order.Hrs || '',
-            WgrNo: order.WgrNo || '',
+            WgrNo: order.WgrNo || 0,
             Anzahl: 1,
             Erstelldatum: order.Erstelldatum || new Date().toISOString(),
             AnzahlTickets: 0,  // Default value for tickets count
@@ -198,7 +197,7 @@ export default function OpenOrdersPage() {
   const columns = [
     {
       header: t('orders.itemNumber'),
-      accessor: (row: OpenOrderGrouped) => row?.ArtikelNr,
+      accessor: (row: OpenOrdersGrouped) => row?.ArtikelNr,
       cell: (value: number) => (
         <span className="font-mono">{value || '-'}</span>
       ),
@@ -206,7 +205,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('orders.brand'),
-      accessor: (row: OpenOrderGrouped) => row?.Hrs,
+      accessor: (row: OpenOrdersGrouped) => row?.Hrs,
       cell: (value: string) => (
         <span>{value || '-'}</span>
       ),
@@ -214,7 +213,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('orders.item'),
-      accessor: (row: OpenOrderGrouped) => row?.Artikel,
+      accessor: (row: OpenOrdersGrouped) => row?.Artikel,
       cell: (value: string) => (
         <span className="max-w-xs truncate block">{value || '-'}</span>
       ),
@@ -222,7 +221,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('orders.productGroup'),
-      accessor: (row: OpenOrderGrouped) => row?.WgrNo,
+      accessor: (row: OpenOrdersGrouped) => row?.WgrNo,
       cell: (value: number) => (
         <span className="font-mono text-xs">{value || '-'}</span>
       ),
@@ -230,7 +229,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('orders.totalOrders'),
-      accessor: (row: OpenOrderGrouped) => row?.Anzahl,
+      accessor: (row: OpenOrdersGrouped) => row?.Anzahl,
       cell: (value: number) => (
         <span>{value ?? 0}</span>
       ),
@@ -238,7 +237,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('orders.deliveryDate'),
-      accessor: (row: OpenOrderGrouped) => {
+      accessor: (row: OpenOrdersGrouped) => {
         if (!row) return { originalDate: "" };
 
         // Find additional data for this item
@@ -270,18 +269,20 @@ export default function OpenOrdersPage() {
         return (
           <div className="flex items-center">
             {value.newDate ? (
-              <>
+              <div className="flex items-center">
                 <span className={`text-sm ${dateColor}`}>
                   <DateFormatter date={value.newDate} showOriginalOnError withTime={false} />
                 </span>
                 <span className="ml-2 text-xs text-gray-500 dark:text-gray-400 line-through">
                   <DateFormatter date={value.originalDate} showOriginalOnError withTime={false} />
                 </span>
-              </>
+              </div>
             ) : (
-              <span className={`text-sm ${dateColor}`}>
-                <DateFormatter date={value.originalDate} showOriginalOnError withTime={false} />
-              </span>
+              <div className="flex items-center">
+                <span className={`text-sm ${dateColor}`}>
+                  <DateFormatter date={value.originalDate} showOriginalOnError withTime={false} />
+                </span>
+              </div>
             )}
           </div>
         );
@@ -290,7 +291,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('orders.alternatives'),
-      accessor: (row: OpenOrderGrouped) => {
+      accessor: (row: OpenOrdersGrouped) => {
         if (!row) return { count: 0, artikelNr: 0 };
 
         // Find additional data for this item to check for alternative items
@@ -319,7 +320,7 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('common.tickets'),
-      accessor: (row: OpenOrderGrouped) => {
+      accessor: (row: OpenOrdersGrouped) => {
         if (!row) return { count: 0, artikelNr: 0 };
         return {
           count: row.AnzahlTickets || 0,
@@ -353,8 +354,8 @@ export default function OpenOrdersPage() {
     },
     {
       header: t('common.actions'),
-      accessor: (row: OpenOrderGrouped) => row,
-      cell: (_: any, row: OpenOrderGrouped) => {
+      accessor: (row: OpenOrdersGrouped) => row,
+      cell: (_: any, row: OpenOrdersGrouped) => {
         if (!row || !row.ArtikelNr) {
           return null;
         }
@@ -377,7 +378,7 @@ export default function OpenOrdersPage() {
   ];
 
   // Handle row click to navigate to order details
-  const handleRowClick = (order: OpenOrderGrouped) => {
+  const handleRowClick = (order: OpenOrdersGrouped) => {
     if (!order || !order.ArtikelNr) {
       console.warn('Unable to navigate - invalid order data:', order);
       return;

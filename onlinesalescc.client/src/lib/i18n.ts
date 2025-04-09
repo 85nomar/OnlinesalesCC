@@ -45,7 +45,7 @@ i18n
     // Enable namespace separation with dots
     keySeparator: '.',
     // Debugging in development
-    debug: process.env.NODE_ENV === 'development',
+    debug: import.meta.env.DEV,
   });
 
 export default i18n;
