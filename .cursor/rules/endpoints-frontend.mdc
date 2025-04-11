@@ -1,6 +1,11 @@
 ---
 description: 
 globs: 
+alwaysApply: false
+---
+---
+description: 
+globs: 
 alwaysApply: true
 ---
 
@@ -26,3 +31,292 @@ DELETE /api/orders/additional/:artikelNr/alternatives/:altArtikelNr - Remove alt
 
 Email Notification Endpoint:
 POST /api/notifications/email - Send email notifications
+
+
+
+---
+
+## 🌐 Backend Endpoints – Required Integration
+
+These are the official .NET backend endpoints to use. Do not use mock data. All data must be retrieved and submitted via these endpoints.
+
+### 📊 Orders
+
+| Function                         | Endpoint                                | Method |
+|----------------------------------|------------------------------------------|--------|
+| Get all grouped orders           | `/api/orders/grouped`                   | GET    |
+| Get grouped orders (filtered)    | `/api/orders/grouped/filter`            | POST   |
+| Get open orders by item number   | `/api/orders?artikelNr={number}`        | GET    |
+| Get order additional data        | `/api/orders/additional/{artikelNr}`    | GET    |
+| Get all additional grouped data  | `/api/orders/additional`                | GET    |
+| Update delivery date             | `/api/orders/update-delivery-date`      | POST   |
+| Add alternative item             | `/api/orders/add-alternative-item`      | POST   |
+| Remove alternative item          | `/api/orders/remove-alternative-item`   | DELETE |
+
+### 🧾 Tickets
+
+| Function                         | Endpoint                                | Method |
+|----------------------------------|------------------------------------------|--------|
+| Get all tickets                  | `/api/tickets`                          | GET    |
+| Get tickets by item number       | `/api/tickets?artikelNr={number}`       | GET    |
+| Create ticket                    | `/api/tickets`                          | POST   |
+| Update ticket                    | `/api/tickets/{ticketId}`               | PUT    |
+| Delete ticket                    | `/api/tickets/{ticketId}`               | DELETE |
+
+### 📬 Email
+
+| Function                         | Endpoint                                | Method |
+|----------------------------------|------------------------------------------|--------|
+| Send bulk email notifications    | `/api/email`                            | POST   |
+
+---
+
+
+You're totally right — just listing the endpoints isn't enough for proper integration. Cursor needs to **know exactly what request and response payloads** to use — especially since the .NET backend uses **German property names**, and the frontend must use **English-mapped equivalents**.
+
+Let me fix that. Here's a **clear, comprehensive "Backend Endpoints" section** in **Markdown**, now including:
+
+- **HTTP method & URL**
+- **Expected request and response types**
+- **Mapped property names** (German ⇄ English)
+- Notes about filters, pagination, or optional fields
+
+---
+
+```markdown
+## 🌐 Backend Endpoints (with Data Types and Mappings)
+
+All data must be fetched from and sent to these real .NET endpoints.
+Frontend should **map all German property names to English** using centralized mapping functions.
+
+---
+
+### 📊 Grouped Orders
+
+#### GET `/api/orders/grouped`
+
+Returns all grouped open orders.
+
+- **Response Type**: `OpenOrdersGrouped[]`
+- **Mapping**:
+
+| Backend (German) | Frontend (English) | Description              |
+|------------------|--------------------|--------------------------|
+| ArtikelNr        | itemNumber         | Item number              |
+| Hrs              | brand              | Brand (Hersteller)       |
+| Artikel          | itemName           | Item name                |
+| WgrNo            | productGroup       | Product group number     |
+| Anzahl           | totalOrders        | Number of orders         |
+| Erstelldatum     | earliestDate       | Earliest delivery date   |
+| AnzahlTickets    | totalTickets       | Associated ticket count  |
+
+---
+
+#### POST `/api/orders/grouped/filter`
+
+Returns filtered/paginated grouped orders.
+
+- **Request Type**: `OrderGroupedFilterRequest`
+
+```jsonc
+{
+  "skip": 0,
+  "take": 50,
+  "search": "Apple",
+  "sortBy": "ArtikelNr",
+  "sortDirection": "asc"
+}
+```
+
+- **Response Type**: `OpenOrdersGrouped[]`
+- **Used for**: Search, pagination, sorting
+
+---
+
+### 📦 Open Orders
+
+#### GET `/api/orders?artikelNr={number}`
+
+Returns all orders for a given item.
+
+- **Response Type**: `OpenOrders[]`
+
+| Backend         | Frontend        | Description          |
+|-----------------|------------------|----------------------|
+| BestellNr       | orderNumber      | Order number         |
+| Erstelldatum    | creationDate     | Date of order        |
+| ArtikelNr       | itemNumber       | Item number          |
+| Hrs             | brand            | Brand (Hersteller)   |
+| Artikel         | itemName         | Item name            |
+| WgrNo           | productGroup     | Product group        |
+| Anzahl          | quantity         | Quantity             |
+| BestellStatus   | orderStatus      | Order status         |
+
+---
+
+### 📎 Order Additional Data
+
+#### GET `/api/orders/additional/{artikelNr}`
+
+Returns additional data for a grouped order, such as new delivery date and alternative items.
+
+- **Response Type**: `OrderAdditionalData`
+
+```jsonc
+{
+  "artikelNr": 123456,
+  "newDeliveryDate": "2025-04-15",
+  "alternativeItems": [
+    {
+      "orderArtikelNr": 123456,
+      "alternativeArtikelNr": 789123,
+      "alternativeArtikel": "Item name"
+    }
+  ]
+}
+```
+
+- **Mapping**:
+
+| Backend             | Frontend                |
+|---------------------|--------------------------|
+| newDeliveryDate     | newDeliveryDate          |
+| orderArtikelNr      | itemNumber               |
+| alternativeArtikelNr| alternativeItemNumber    |
+| alternativeArtikel  | alternativeItemName      |
+
+---
+
+### 📌 Delivery & Alternatives
+
+#### POST `/api/orders/update-delivery-date`
+
+Updates the new delivery date.
+
+```json
+{
+  "artikelNr": 123456,
+  "newDeliveryDate": "2025-04-20"
+}
+```
+
+---
+
+#### POST `/api/orders/add-alternative-item`
+
+Adds an alternative item to a product.
+
+```json
+{
+  "orderArtikelNr": 123456,
+  "alternativeArtikelNr": 789123,
+  "alternativeArtikel": "Alternative Product"
+}
+```
+
+---
+
+#### DELETE `/api/orders/remove-alternative-item`
+
+Removes an alternative item.
+
+```json
+{
+  "orderArtikelNr": 123456,
+  "alternativeArtikelNr": 789123
+}
+```
+
+---
+
+### 🧾 Tickets
+
+#### GET `/api/tickets`
+
+Fetches all tickets.
+
+- **Response Type**: `OrderTicket[]`
+
+#### GET `/api/tickets?artikelNr={number}`
+
+Fetches all tickets for a specific item.
+
+#### POST `/api/tickets`
+
+Creates a new ticket.
+
+```json
+{
+  "artikelNr": 123456,
+  "bestellNr": 789123,
+  "comment": "Delayed",
+  "byUser": "admin"
+}
+```
+
+- **Failsafe**: `artikelNr` and `bestellNr` must match a valid order; must be numeric; min. 4 digits
+
+---
+
+#### PUT `/api/tickets/{ticketId}`
+
+Updates a ticket.
+
+```json
+{
+  "ticketId": 1,
+  "artikelNr": 123456,
+  "bestellNr": 789123,
+  "comment": "New comment"
+}
+```
+
+---
+
+#### DELETE `/api/tickets/{ticketId}`
+
+Deletes a ticket.
+
+---
+
+### 📬 Email Notifications
+
+#### POST `/api/email`
+
+Sends bulk email notifications to customers.
+
+```json
+{
+  "orderNumbers": [789123, 789124],
+  "subject": "Update on your order",
+  "content": "New delivery date is 12.04.2025",
+  "artikelNr": 123456
+}
+```
+
+- `orderNumbers` can also be `'all'` to send to every customer with the item
+
+---
+
+### 🧠 Additional Notes
+
+- All lists must support **pagination** via `skip` / `take`
+- Backend supports **search & sort** on most endpoints
+- Dates must be parsed and displayed in **Swiss format (dd.MM.YYYY)**
+- All German fields must be mapped to English via `mappings.ts`
+
+```
+
+---
+
+Let me know if you want this merged into the **full setup file** for Cursor, or split into sections (e.g., setup, endpoints, mappings, layout, theming).
+
+
+
+
+📌 **All request/response types must match exactly** as defined in the C# backend models (e.g., `OpenOrdersGrouped`, `OrderTicket`, etc.). Use DTOs from the provided `README_ENDPOINTS.md` or backend C# files.
+
+📌 **Filters** (like in `OrderGroupedFilterRequest`) must be passed via POST payload when available.
+
+📌 **Paginate large datasets** using supported query parameters or request models (`take`, `skip`, `artikelNr`, etc.) — these are implemented backend-side and required for performance.
+

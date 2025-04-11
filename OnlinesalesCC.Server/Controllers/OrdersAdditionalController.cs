@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using OnlinesalesCC.Server.Models;
 using System;
 using System.Linq;
@@ -11,6 +12,16 @@ namespace OnlinesalesCC.Server.Controllers
   [Route("api/orders/additional")]
   public class OrdersAdditionalController : ControllerBase
   {
+    private readonly ILogger<OrdersAdditionalController> _logger;
+
+    public OrdersAdditionalController(ILogger<OrdersAdditionalController> logger)
+    {
+      _logger = logger;
+    }
+
+    /// <summary>
+    /// Get all additional order data
+    /// </summary>
     [HttpGet]
     public IActionResult GetAll()
     {
@@ -47,6 +58,7 @@ namespace OnlinesalesCC.Server.Controllers
       }
       catch (Exception ex)
       {
+        _logger.LogError(ex, "Error getting all additional order data");
         return StatusCode(500, $"Internal server error: {ex.Message}");
       }
     }
@@ -117,6 +129,9 @@ namespace OnlinesalesCC.Server.Controllers
       return result;
     }
 
+    /// <summary>
+    /// Get additional data for a specific article
+    /// </summary>
     [HttpGet("{artikelNr:int}")]
     public IActionResult GetByArtikelNr(int artikelNr)
     {
@@ -124,6 +139,19 @@ namespace OnlinesalesCC.Server.Controllers
       {
         using (var context = new FomdbNewContext())
         {
+          // First, get any alternative items regardless of additional data existence
+          var alternativeItems = context.OrderAlternativeItems
+              .Where(a => a.OrderArtikelNr == artikelNr)
+              .Select(a => new AlternativeItemResponse
+              {
+                ArtikelNr = a.AlternativeArtikelNr,
+                Artikel = a.AlternativeArtikel
+              })
+              .ToList();
+
+          Console.WriteLine($"Found {alternativeItems.Count} alternative items for artikelNr={artikelNr}");
+
+          // Now check if additional data exists
           var additionalData = context.OrderAdditionalData
               .FirstOrDefault(a => a.ArtikelNr == artikelNr);
 
@@ -133,21 +161,11 @@ namespace OnlinesalesCC.Server.Controllers
             additionalData = new OrderAdditionalData
             {
               ArtikelNr = artikelNr,
-              AlternativeItems = new List<AlternativeItemResponse>()
+              AlternativeItems = alternativeItems // Use the items we already found
             };
           }
           else
           {
-            // Get alternative items and map to response format
-            var alternativeItems = context.OrderAlternativeItems
-                .Where(a => a.OrderArtikelNr == artikelNr)
-                .Select(a => new AlternativeItemResponse
-                {
-                  ArtikelNr = a.AlternativeArtikelNr,
-                  Artikel = a.AlternativeArtikel
-                })
-                .ToList();
-
             // Assign alternative items to the additional data
             additionalData.AlternativeItems = alternativeItems;
           }
@@ -157,10 +175,14 @@ namespace OnlinesalesCC.Server.Controllers
       }
       catch (Exception ex)
       {
+        _logger.LogError(ex, $"Error getting additional data for artikelNr: {artikelNr}");
         return StatusCode(500, $"Internal server error: {ex.Message}");
       }
     }
 
+    /// <summary>
+    /// Update delivery date for a specific article
+    /// </summary>
     [HttpPatch("{artikelNr:int}/delivery-date")]
     public IActionResult UpdateDeliveryDate(int artikelNr, [FromBody] DeliveryDateUpdate dateUpdate)
     {
@@ -201,53 +223,42 @@ namespace OnlinesalesCC.Server.Controllers
           }
 
           context.SaveChanges();
-          return NoContent();
+          return Ok(new { success = true, message = "Delivery date updated successfully" });
         }
       }
       catch (Exception ex)
       {
+        _logger.LogError(ex, $"Error updating delivery date for artikelNr: {artikelNr}");
         return StatusCode(500, $"Internal server error: {ex.Message}");
       }
     }
 
+    /// <summary>
+    /// Add alternative item for a specific article
+    /// </summary>
     [HttpPost("{artikelNr:int}/alternatives")]
     public IActionResult AddAlternativeItem(int artikelNr, [FromBody] AlternativeItemRequest request)
     {
       if (request == null || request.ArtikelNr <= 0 || string.IsNullOrEmpty(request.Artikel))
       {
-        return BadRequest("Alternative item data is required");
+        return BadRequest("Alternative item details are required");
       }
 
       try
       {
         using (var context = new FomdbNewContext())
         {
-          // Check if article exists first
-          var existingData = context.OrderAdditionalData
-              .FirstOrDefault(x => x.ArtikelNr == artikelNr);
+          // Check for duplicate
+          var existing = context.OrderAlternativeItems
+              .FirstOrDefault(a => a.OrderArtikelNr == artikelNr && 
+                                a.AlternativeArtikelNr == request.ArtikelNr);
 
-          if (existingData == null)
+          if (existing != null)
           {
-            // Create the additional data entry if it doesn't exist
-            existingData = new OrderAdditionalData
-            {
-              ArtikelNr = artikelNr
-            };
-            context.OrderAdditionalData.Add(existingData);
-            context.SaveChanges();
+            return Conflict("Alternative item already exists");
           }
 
-          // Check if this alternative already exists
-          var existingAlternative = context.OrderAlternativeItems
-              .FirstOrDefault(a => a.OrderArtikelNr == artikelNr &&
-                               a.AlternativeArtikelNr == request.ArtikelNr);
-
-          if (existingAlternative != null)
-          {
-            return BadRequest("This alternative item already exists");
-          }
-
-          // Add the alternative item
+          // Create a new alternative item
           var newAlternative = new OrderAlternativeItem
           {
             OrderArtikelNr = artikelNr,
@@ -256,24 +267,50 @@ namespace OnlinesalesCC.Server.Controllers
           };
 
           context.OrderAlternativeItems.Add(newAlternative);
+
+          // Check if we need to create an OrderAdditionalData record
+          var additionalData = context.OrderAdditionalData
+              .FirstOrDefault(a => a.ArtikelNr == artikelNr);
+
+          if (additionalData == null)
+          {
+            // Create a new record
+            var newData = new OrderAdditionalData
+            {
+              ArtikelNr = artikelNr,
+              // Leave dates null
+            };
+
+            context.OrderAdditionalData.Add(newData);
+            Console.WriteLine($"Created new OrderAdditionalData record for artikelNr={artikelNr}");
+          }
+
           context.SaveChanges();
 
-          // Return a response in the format expected by the frontend
-          var response = new AlternativeItemResponse
-          {
-            ArtikelNr = request.ArtikelNr,
-            Artikel = request.Artikel
-          };
+          Console.WriteLine($"Added alternative item for artikelNr={artikelNr}: {request.ArtikelNr} - {request.Artikel}");
 
-          return Created($"/api/orders/additional/{artikelNr}", response);
+          return Created($"/api/orders/additional/{artikelNr}", new 
+          { 
+            success = true, 
+            message = "Alternative item added", 
+            item = new AlternativeItemResponse 
+            { 
+              ArtikelNr = newAlternative.AlternativeArtikelNr, 
+              Artikel = newAlternative.AlternativeArtikel 
+            } 
+          });
         }
       }
       catch (Exception ex)
       {
+        _logger.LogError(ex, $"Error adding alternative item for artikelNr: {artikelNr}");
         return StatusCode(500, $"Internal server error: {ex.Message}");
       }
     }
 
+    /// <summary>
+    /// Remove alternative item for a specific article
+    /// </summary>
     [HttpDelete("{artikelNr:int}/alternatives/{altArtikelNr:int}")]
     public IActionResult RemoveAlternativeItem(int artikelNr, int altArtikelNr)
     {
@@ -281,23 +318,24 @@ namespace OnlinesalesCC.Server.Controllers
       {
         using (var context = new FomdbNewContext())
         {
-          var alternativeItem = context.OrderAlternativeItems
-              .FirstOrDefault(a => a.OrderArtikelNr == artikelNr &&
-                               a.AlternativeArtikelNr == altArtikelNr);
+          var item = context.OrderAlternativeItems
+              .FirstOrDefault(a => a.OrderArtikelNr == artikelNr && 
+                                 a.AlternativeArtikelNr == altArtikelNr);
 
-          if (alternativeItem == null)
+          if (item == null)
           {
-            return NotFound("Alternative item not found");
+            return NotFound($"Alternative item not found");
           }
 
-          context.OrderAlternativeItems.Remove(alternativeItem);
+          context.OrderAlternativeItems.Remove(item);
           context.SaveChanges();
 
-          return NoContent();
+          return Ok(new { success = true, message = "Alternative item removed" });
         }
       }
       catch (Exception ex)
       {
+        _logger.LogError(ex, $"Error removing alternative item: orderArtikelNr={artikelNr}, altArtikelNr={altArtikelNr}");
         return StatusCode(500, $"Internal server error: {ex.Message}");
       }
     }

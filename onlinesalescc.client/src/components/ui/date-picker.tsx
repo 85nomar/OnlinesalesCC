@@ -69,7 +69,6 @@ export function DatePicker({ date, setDate, className, disabled, inputRef, requi
           className="flex-1 outline-none bg-transparent cursor-pointer"
           ref={inputRef}
           required={required}
-          aria-required={required}
           // Remove any potential for autofocus
           autoComplete="off"
           autoFocus={false}

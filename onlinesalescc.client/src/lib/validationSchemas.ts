@@ -11,10 +11,10 @@ import { z } from "zod";
  * For creating/editing a ticket with optional order number
  */
 export const ticketFormSchema = z.object({
-  artikelNr: z.number()
+  itemNumber: z.number()
     .int("Item number must be an integer")
     .gte(1000, "Item number must be at least 4 digits"),
-  bestellNr: z.number()
+  orderNumber: z.number()
     .int("Order number must be an integer")
     .gte(0, "Order number must be a positive number")
     .optional()

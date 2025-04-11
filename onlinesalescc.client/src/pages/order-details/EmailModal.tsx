@@ -21,21 +21,21 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Mail, Check } from "lucide-react";
-import { EmailService } from "@/services/api";
+import { EmailService } from "@/features/email";
 import { useToast } from "@/hooks/use-toast";
 import DateFormatter from "@/components/DateFormatter";
-import type { OpenOrders, AlternativeItem } from "@/shared/schema";
+import { MappedOpenOrder, MappedAlternativeItem } from "@/features/orders/types/mappings";
 
 interface EmailModalProps {
   isOpen: boolean;
   onClose: () => void;
   itemInfo: {
-    artikelNr: number;
-    artikel: string;
+    itemNumber: number;
+    itemName: string;
     newDeliveryDate: string;
-    alternatives: AlternativeItem[];
+    alternatives: MappedAlternativeItem[];
   };
-  orders: OpenOrders[];
+  orders: MappedOpenOrder[];
 }
 
 // Email form schema
@@ -62,7 +62,7 @@ export default function EmailModal({
     resolver: zodResolver(emailFormSchema),
     defaultValues: {
       notificationType: "all",
-      subject: `Update regarding your ${itemInfo.artikel} order`,
+      subject: `Update regarding your ${itemInfo.itemName} order`,
     },
   });
 
@@ -77,24 +77,24 @@ export default function EmailModal({
 
       // Email content is pre-generated based on the item and delivery info
       const emailContent = generateEmailContent(
-        itemInfo.artikel,
+        itemInfo.itemName,
         itemInfo.newDeliveryDate,
         itemInfo.alternatives,
       );
 
       // Send the email
-      const result = await EmailService.sendNotifications({
-        orderNumbers,
+      const response = await EmailService.sendNotifications({
+        orderNumbers: orders.map((order) => order.orderNumber),
         subject: values.subject,
         content: emailContent,
-        artikelNr: itemInfo.artikelNr,
+        artikelNr: itemInfo.itemNumber
       });
 
-      if (result.success) {
+      if (response.success) {
         setSuccess(true);
         toast({
           title: "Success",
-          description: result.message,
+          description: response.message,
         });
 
         // Reset form after success
@@ -103,7 +103,7 @@ export default function EmailModal({
           onClose();
         }, 2000);
       } else {
-        throw new Error(result.message);
+        throw new Error(response.message);
       }
     } catch (error) {
       console.error("Failed to send email:", error);
@@ -150,35 +150,29 @@ export default function EmailModal({
                 name="notificationType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Notification Recipients</FormLabel>
+                    <FormLabel>Notification Type</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
                         defaultValue={field.value}
-                        className="flex flex-col space-y-2"
+                        className="flex flex-col space-y-1"
                       >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="all" id="option-all" />
-                          <label
-                            htmlFor="option-all"
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                          >
-                            Notify all customers ({orders.length} orders)
-                          </label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            value="selected"
-                            id="option-selected"
-                            disabled
-                          />
-                          <label
-                            htmlFor="option-selected"
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                          >
-                            Select specific orders (not implemented)
-                          </label>
-                        </div>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="all" />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                            All Orders
+                          </FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value="selected" />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                            Selected Orders
+                          </FormLabel>
+                        </FormItem>
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />
@@ -208,7 +202,7 @@ export default function EmailModal({
                   <p>Dear Customer,</p>
                   <p className="mt-2">
                     We would like to inform you about an update to your recent
-                    order of the {itemInfo.artikel}.
+                    order of the {itemInfo.itemName}.
                   </p>
                   <p className="mt-2">
                     Unfortunately, there has been a delay in our supply chain,
@@ -219,26 +213,25 @@ export default function EmailModal({
                     .
                   </p>
 
-                  {itemInfo.alternatives &&
-                    itemInfo.alternatives.length > 0 && (
-                      <>
-                        <p className="mt-2">
-                          We apologize for any inconvenience this may cause and
-                          would like to offer you the following alternatives
-                          that are currently in stock:
-                        </p>
-                        <ul className="mt-2 list-disc pl-5">
-                          {itemInfo.alternatives.map((alt) => (
-                            <li key={alt.artikelNr}>{alt.artikel}</li>
-                          ))}
-                        </ul>
-                        <p className="mt-2">
-                          If you would like to switch to one of these
-                          alternatives, please reply to this email or contact
-                          our customer service.
-                        </p>
-                      </>
-                    )}
+                  {itemInfo.alternatives.length > 0 && (
+                    <>
+                      <p className="mt-2">
+                        We apologize for any inconvenience this may cause and
+                        would like to offer you the following alternatives
+                        that are currently in stock:
+                      </p>
+                      <ul className="mt-2 list-disc pl-5">
+                        {itemInfo.alternatives.map((alt) => (
+                          <li key={alt.alternativeItemNumber}>{alt.alternativeItemName}</li>
+                        ))}
+                      </ul>
+                      <p className="mt-2">
+                        If you would like to switch to one of these
+                        alternatives, please reply to this email or contact
+                        our customer service.
+                      </p>
+                    </>
+                  )}
 
                   <p className="mt-2">Thank you for your understanding.</p>
                   <p className="mt-2">
@@ -276,7 +269,7 @@ export default function EmailModal({
 function generateEmailContent(
   itemName: string,
   deliveryDate: string,
-  alternatives: AlternativeItem[],
+  alternatives: MappedAlternativeItem[],
 ): string {
   let content = `
     Dear Customer,
@@ -291,7 +284,7 @@ function generateEmailContent(
       
       We apologize for any inconvenience this may cause and would like to offer you the following alternatives that are currently in stock:
       
-      ${alternatives.map((alt) => `- ${alt.artikel}`).join("\n")}
+      ${alternatives.map((alt) => `- ${alt.alternativeItemName}`).join("\n")}
       
       If you would like to switch to one of these alternatives, please reply to this email or contact our customer service.
     `;

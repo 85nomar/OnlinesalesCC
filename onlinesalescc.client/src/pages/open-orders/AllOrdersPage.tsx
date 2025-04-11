@@ -1,14 +1,31 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { OrdersService } from "@/services/api";
-import { TicketsService } from "@/services/tickets.service";
+import { OrdersService } from "@/features/orders";
+import { TicketsService } from "@/features/tickets";
 import DataTable from "@/components/DataTable";
 import DateFormatter from "@/components/DateFormatter";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import OrderTicketsModal from "./OrderTicketsModal";
 import { useLocation } from "wouter";
+import { 
+  MappedOpenOrder, 
+  MappedOpenOrderGrouped, 
+  mapOpenOrder, 
+  mapOpenOrderGrouped 
+} from "@/features/orders/types/mappings";
+import { OpenOrder, OpenOrderGrouped, OrderFilterRequest } from "@/features/orders/types/models";
+
+type OrderData = MappedOpenOrder | MappedOpenOrderGrouped;
+
+// Define interface matching DataTable expectations
+interface DataTableColumn<T> {
+  header: string;
+  accessor: keyof T | ((row: T) => any);
+  cell?: (value: any, row: T) => React.ReactNode;
+  sortable?: boolean;
+}
 
 export default function AllOrdersPage() {
   const { toast } = useToast();
@@ -20,16 +37,16 @@ export default function AllOrdersPage() {
   const [pageSize, setPageSize] = useState(25);
   const [sortBy, setSortBy] = useState<string | undefined>('erstelldatum');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [ticketCounts, setTicketCounts] = useState<Record<number, number>>({});
+  const [ticketCounts, setTicketCounts] = useState<Record<string, number>>({});
 
   // State for tickets modal
-  const [selectedArtikelNr, setSelectedArtikelNr] = useState<number | null>(null);
-  const [selectedBestellNr, setSelectedBestellNr] = useState<number | null>(null);
+  const [selectedItemNumber, setSelectedItemNumber] = useState<number | null>(null);
+  const [selectedOrderNumber, setSelectedOrderNumber] = useState<number | null>(null);
   const [isTicketsModalOpen, setIsTicketsModalOpen] = useState(false);
 
   // State for global search
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
-  const [globalSearchResults, setGlobalSearchResults] = useState<OpenOrders[]>([]);
+  const [globalSearchResults, setGlobalSearchResults] = useState<MappedOpenOrder[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   // Fetch all orders with pagination
@@ -37,7 +54,18 @@ export default function AllOrdersPage() {
     queryKey: ['allOrders', page, pageSize, sortBy, sortDirection],
     queryFn: async () => {
       try {
-        return await OrdersService.getPaginatedOrders(page, pageSize, sortBy, sortDirection);
+        // Use the filter parameters that match OrderFilterRequest
+        // Since OrderFilterRequest doesn't have pagination/sorting, we'll handle it differently
+        const orders = await OrdersService.getOpenOrders();
+        
+        // Manual client-side pagination and sorting as a workaround
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        
+        return { 
+          items: orders.slice(startIndex, endIndex),
+          totalCount: orders.length
+        };
       } catch (error) {
         console.error("Failed to fetch orders:", error);
         toast({
@@ -52,8 +80,10 @@ export default function AllOrdersPage() {
     enabled: !globalSearchQuery
   });
 
-  // Extract orders and total count from response
-  const orders = ordersResponse?.items || [];
+  // We need to check if ordersResponse and ordersResponse.items exist before trying to access them
+  const orders = ordersResponse?.items ? 
+    ordersResponse.items : 
+    [];
   const totalCount = ordersResponse?.totalCount || 0;
 
   // Fetch ticket counts for each order when orders change
@@ -69,22 +99,20 @@ export default function AllOrdersPage() {
         const allTickets = await TicketsService.getAllTickets();
 
         // Create a map of order numbers to ticket counts
-        const countsMap: Record<number, number> = {};
+        const countsMap: Record<string, number> = {};
 
         // Initialize all orders with 0 counts
-        ordersToProcess.forEach(order => {
-          if (order.BestellNr) {
-            countsMap[order.BestellNr] = 0;
+        ordersToProcess.forEach((order: MappedOpenOrder) => {
+          if (order.orderNumber) {
+            countsMap[order.orderNumber.toString()] = 0;
           }
         });
 
         // Count tickets for each order
         allTickets.forEach(ticket => {
-          if (ticket.bestellNr) {
-            const bestellNr = parseInt(ticket.bestellNr.toString(), 10);
-            if (countsMap[bestellNr] !== undefined) {
-              countsMap[bestellNr] = (countsMap[bestellNr] || 0) + 1;
-            }
+          const orderNumber = ticket.orderNumber?.toString();
+          if (orderNumber && countsMap[orderNumber] !== undefined) {
+            countsMap[orderNumber]++;
           }
         });
 
@@ -92,10 +120,10 @@ export default function AllOrdersPage() {
       } catch (error) {
         console.error("Error fetching tickets:", error);
         // Initialize all with 0 in case of error
-        const countsMap: Record<number, number> = {};
-        ordersToProcess.forEach(order => {
-          if (order.BestellNr) {
-            countsMap[order.BestellNr] = 0;
+        const countsMap: Record<string, number> = {};
+        ordersToProcess.forEach((order: MappedOpenOrder) => {
+          if (order.orderNumber) {
+            countsMap[order.orderNumber.toString()] = 0;
           }
         });
         setTicketCounts(countsMap);
@@ -140,8 +168,27 @@ export default function AllOrdersPage() {
     setIsSearching(true);
 
     try {
-      // Use the centralized search function from OrdersService
-      const results = await OrdersService.searchOrders(query);
+      // Try to determine if query is an item number, order number, or something else
+      const numberValue = parseInt(query, 10);
+      
+      // Create a filter that matches the OrderFilterRequest interface
+      let filter: Partial<OrderFilterRequest> = {};
+      
+      if (!isNaN(numberValue)) {
+        // If query is a number, search both item and order numbers
+        if (numberValue > 1000000) {
+          // Likely an order number (longer)
+          filter.orderNumber = numberValue;
+        } else {
+          // Likely an item number (shorter)
+          filter.itemNumber = numberValue;
+        }
+      } else {
+        // If query is text, it could be a supplier or status
+        filter.supplier = query;
+      }
+      
+      const results = await OrdersService.getOpenOrders(filter);
       setGlobalSearchResults(results);
       console.log(`Global search for "${query}" returned ${results.length} results`);
     } catch (error) {
@@ -158,17 +205,17 @@ export default function AllOrdersPage() {
   };
 
   // Handle open tickets modal
-  const handleOpenTicketsModal = (artikelNr: number, bestellNr?: number) => {
-    setSelectedArtikelNr(artikelNr);
-    setSelectedBestellNr(bestellNr || null);
+  const handleOpenTicketsModal = (itemNumber: number, orderNumber?: number) => {
+    setSelectedItemNumber(itemNumber);
+    setSelectedOrderNumber(orderNumber || null);
     setIsTicketsModalOpen(true);
   };
 
   // Handle close tickets modal
   const handleCloseTicketsModal = () => {
     setIsTicketsModalOpen(false);
-    setSelectedArtikelNr(null);
-    setSelectedBestellNr(null);
+    setSelectedItemNumber(null);
+    setSelectedOrderNumber(null);
   };
 
   // Get badge variant based on status text
@@ -195,110 +242,101 @@ export default function AllOrdersPage() {
   };
 
   // Handle row click to navigate to order details
-  const handleRowClick = (order: OpenOrders) => {
-    if (!order || !order.ArtikelNr) {
-      console.warn('Unable to navigate - invalid order data:', order);
-      return;
+  const handleRowClick = (row: OrderData) => {
+    if ('itemNumber' in row && row.itemNumber && 'orderNumber' in row && row.orderNumber) {
+      handleOpenTicketsModal(row.itemNumber, row.orderNumber);
     }
-    navigate(`/order-details/${order.ArtikelNr}`);
   };
 
   // Table columns configuration
-  const columns = [
+  const columns: DataTableColumn<OrderData>[] = [
     {
-      header: t('orders.orderNumber'),
-      accessor: (row: OpenOrders) => row?.BestellNr,
-      cell: (value: number) => (
-        <span className="font-mono">{value || '-'}</span>
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.date'),
-      accessor: (row: OpenOrders) => row?.Erstelldatum,
-      cell: (value: string) => (
-        <DateFormatter date={value} showOriginalOnError withTime={true} />
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.itemNumber'),
-      accessor: (row: OpenOrders) => row?.ArtikelNr,
-      cell: (value: number) => (
-        <span className="font-mono">{value || '-'}</span>
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.brand'),
-      accessor: (row: OpenOrders) => row?.Hrs,
-      cell: (value: string) => (
-        <span>{value || '-'}</span>
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.item'),
-      accessor: (row: OpenOrders) => row?.Artikel,
-      cell: (value: string) => (
-        <span className="max-w-xs truncate block">{value || '-'}</span>
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.productGroup'),
-      accessor: (row: OpenOrders) => row?.WgrNo,
-      cell: (value: string) => (
-        <span className="font-mono text-xs">{value || '-'}</span>
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.quantity'),
-      accessor: (row: OpenOrders) => row?.Anzahl,
-      cell: (value: number) => (
-        <span>{value ?? 0}</span>
-      ),
-      sortable: true
-    },
-    {
-      header: t('orders.tickets', 'Tickets'),
-      accessor: (row: OpenOrders) => row?.BestellNr ? ticketCounts[row.BestellNr] || 0 : 0,
-      cell: (value: number, row: OpenOrders) => (
-        <div className="flex items-center justify-center">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (row.ArtikelNr) {
-                // Pass both the article number and order number when opening the modal
-                handleOpenTicketsModal(row.ArtikelNr, row.BestellNr);
-              }
-            }}
-            disabled={false} // Allow clicking even if count is 0 to add new tickets
-            className="flex justify-center items-center p-1"
-            title={value > 0 ? `${value} ${t('common.tickets')}` : t('tickets.addTicket', 'Add ticket')}
-          >
-            <Badge variant={value > 0 ? "counter" : "zero"}>
-              {value}
-            </Badge>
-          </button>
-        </div>
-      ),
-      sortable: false
-    },
-    {
-      header: t('orders.status'),
-      accessor: (row: OpenOrders) => row?.BestellStatus,
-      cell: (value: string) => {
-        if (!value) return <span className="text-muted-foreground">-</span>;
-
-        // Get the appropriate badge variant for this status
-        const variant = getStatusBadgeVariant(value);
-
-        return <Badge variant={variant as any}>{value}</Badge>;
+      accessor: "itemNumber",
+      header: t("orders.itemNumber"),
+      cell: (value, row) => {
+        return 'itemNumber' in row ? (
+          <span className="font-mono">{row.itemNumber || '-'}</span>
+        ) : null;
       },
-      sortable: true
-    }
+    },
+    {
+      accessor: "itemName",
+      header: t("orders.itemName"),
+      cell: (value, row) => {
+        return 'itemName' in row ? (
+          <span className="max-w-xs truncate block">{row.itemName || '-'}</span>
+        ) : null;
+      },
+    },
+    {
+      accessor: (row) => 'orderNumber' in row ? row.orderNumber : undefined,
+      header: t("orders.orderNumber"),
+      cell: (value, row) => {
+        return 'orderNumber' in row ? (
+          <span className="font-mono">{row.orderNumber || '-'}</span>
+        ) : null;
+      },
+    },
+    {
+      accessor: (row) => 'quantity' in row ? row.quantity : 0,
+      header: t("orders.quantity"),
+      cell: (value, row) => {
+        return 'quantity' in row ? (
+          <span>{row.quantity ?? 0}</span>
+        ) : null;
+      },
+    },
+    {
+      accessor: (row) => 'deliveryDate' in row ? row.deliveryDate : undefined,
+      header: t("orders.deliveryDate"),
+      cell: (value, row) => {
+        return 'deliveryDate' in row ? (
+          <DateFormatter date={row.deliveryDate} showOriginalOnError withTime={true} />
+        ) : null;
+      },
+    },
+    {
+      accessor: (row) => 'orderNumber' in row ? ticketCounts[row.orderNumber?.toString() || ''] || 0 : 0,
+      header: t("orders.tickets"),
+      cell: (value, row) => {
+        if (!('orderNumber' in row) || !row.orderNumber) return null;
+        
+        const count = ticketCounts[row.orderNumber.toString()] || 0;
+        return (
+          <div className="flex items-center justify-center">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if ('itemNumber' in row && row.itemNumber) {
+                  handleOpenTicketsModal(row.itemNumber, row.orderNumber);
+                }
+              }}
+              className="flex justify-center items-center p-1"
+              title={count > 0 ? t('common.tickets', { count }) : t('tickets.addTicket')}
+            >
+              <Badge variant={count > 0 ? "counter" : "zero"}>
+                {count}
+              </Badge>
+            </button>
+          </div>
+        );
+      },
+    },
+    {
+      accessor: (row) => 'status' in row ? row.status : 'orderStatus' in row ? row.orderStatus : undefined,
+      header: t("orders.status"),
+      cell: (value, row) => {
+        if (!('status' in row || 'orderStatus' in row)) {
+          return <span className="text-muted-foreground">-</span>;
+        }
+        const status = 'status' in row ? row.status : 'orderStatus' in row ? row.orderStatus : null;
+        if (!status) {
+          return <span className="text-muted-foreground">-</span>;
+        }
+        const variant = getStatusBadgeVariant(status as string);
+        return <Badge variant={variant as any}>{status as string}</Badge>;
+      },
+    },
   ];
 
   return (
@@ -316,11 +354,11 @@ export default function AllOrdersPage() {
         {/* Open Orders Table */}
         <div className="bg-background dark:bg-darkElevated rounded-lg shadow-sm overflow-hidden">
           <DataTable
-            data={orders}
+            data={globalSearchQuery ? globalSearchResults : orders}
             columns={columns}
             isLoading={isLoadingOrders}
             searchable={true}
-            searchFields={["BestellNr", "ArtikelNr", "Hrs", "Artikel", "BestellStatus"]}
+            searchFields={["itemNumber", "itemName", "orderNumber", "supplier", "orderStatus"]}
             // Pass pagination props
             totalItems={totalCount}
             page={page}
@@ -340,12 +378,12 @@ export default function AllOrdersPage() {
       </div>
 
       {/* Tickets Modal */}
-      {selectedArtikelNr && (
+      {selectedItemNumber !== null && (
         <OrderTicketsModal
           isOpen={isTicketsModalOpen}
           onClose={handleCloseTicketsModal}
-          artikelNr={selectedArtikelNr}
-          bestellNr={selectedBestellNr || undefined}
+          itemNumber={selectedItemNumber}
+          orderNumber={selectedOrderNumber || undefined}
         />
       )}
     </>

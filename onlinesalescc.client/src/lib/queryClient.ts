@@ -4,6 +4,7 @@ import {
     AUTH_REQUIRED,
     AUTH_HEADER_NAME,
     AUTH_TOKEN_PREFIX,
+    getApiUrl,
     getAuthToken
 } from '@/config/api.config';
 
@@ -11,14 +12,7 @@ import {
  * API Configuration Module
  * 
  * This module provides utilities for making API requests.
- * It supports three modes:
- * 1. Internal Mock Mode: Uses the built-in mock data provided by the application
- * 2. External Mock Mode: Uses external mock data through adapter layer
- * 3. Real API Mode: Makes real HTTP requests to the backend
- * 
- * MIGRATION STEP: To migrate to a real API backend:
- * 1. Set CURRENT_DATA_SOURCE to DataSource.REAL_API in '@/config/api.config'
- * 2. Configure API_BASE_URL in '@/config/api.config'
+ * It supports making HTTP requests to the ASP.NET Core backend.
  */
 
 /**
@@ -32,33 +26,37 @@ async function throwIfResNotOk(res: Response) {
 }
 
 /**
- * API request function for React Query
+ * Makes an API request
  * 
- * This function is used as the default queryFn for React Query.
- * It handles API calls to the ASP.NET Core backend.
+ * This function is used by react-query mutations.
  */
 export async function apiRequest(
-    { queryKey: [endpoint], signal }: { queryKey: [string], signal?: AbortSignal }
+    method: string,
+    endpoint: string,
+    data?: unknown | undefined,
 ): Promise<Response> {
-    // Build headers
-    const requestHeaders: Record<string, string> = {};
 
-    // Add auth token if required
+    // Build headers
+    const headers: Record<string, string> = {};
+
+    // Add content-type for requests with body
+    if (data) {
+        headers["Content-Type"] = "application/json";
+    }
+
+    // Add auth header if required
     if (AUTH_REQUIRED) {
-        const token = getAuthToken();
-        if (token) {
-            requestHeaders["Authorization"] = `${AUTH_TOKEN_PREFIX}${token}`;
-        }
+        headers[AUTH_HEADER_NAME] = `${AUTH_TOKEN_PREFIX} ${getAuthToken()}`;
     }
 
     // Build URL
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = getApiUrl(endpoint);
 
     // Make the request
     const res = await fetch(url, {
-        method: 'GET',
-        headers: requestHeaders,
-        signal,
+        method,
+        headers,
+        body: data ? JSON.stringify(data) : undefined,
         credentials: "include",
     });
 
@@ -67,26 +65,19 @@ export async function apiRequest(
 }
 
 /**
- * Query client instance for ASP.NET Core backend
+ * Query client instance configuration
  */
 export const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            queryFn: async ({ queryKey, signal }) => {
-                const endpoint = queryKey[0];
-                if (typeof endpoint !== 'string') {
-                    throw new Error('Query key must be a string');
-                }
-                return apiRequest({ queryKey: [endpoint], signal });
-            },
             refetchInterval: false,
             refetchOnWindowFocus: false,
             staleTime: Infinity,
-            retry: 1
+            retry: false,
         },
         mutations: {
-            retry: 1
-        }
+            retry: false,
+        },
     },
 });
 

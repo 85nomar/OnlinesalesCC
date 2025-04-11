@@ -1,8 +1,16 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+
+
 **Project Cleanup: Node.js to ASP.NET Migration**
 
 Let's thoroughly clean up the project after migrating from Node.js to ASP.NET:

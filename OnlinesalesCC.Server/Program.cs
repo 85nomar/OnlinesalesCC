@@ -26,6 +26,12 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<FomdbNewContext>(options =>
     options.UseSqlServer(connectionString));
 
+// Register logging
+builder.Services.AddLogging();
+
+// Configure SMTP settings from appsettings.json
+builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
+
 // Enable CORS for frontend 
 builder.Services.AddCors(options =>
 {
@@ -58,3 +64,14 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// SMTP configuration class
+public class SmtpSettings
+{
+    public string Server { get; set; } = string.Empty;
+    public int Port { get; set; } = 25;
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public bool EnableSsl { get; set; } = false;
+    public string FromAddress { get; set; } = string.Empty;
+}

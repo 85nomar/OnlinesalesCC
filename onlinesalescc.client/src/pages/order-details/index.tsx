@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
-import { OrdersService, OrdersAdditionalService, TicketsService } from "@/services/api";
+import { 
+  OrdersService, 
+  OrdersAdditionalService, 
+  mapOpenOrder, 
+  mapOpenOrderGrouped 
+} from "@/features/orders";
+import { TicketsService } from "@/features/tickets";
 import { getDeliveryDateStatus } from "@/lib/utils";
 import DateFormatter from "@/components/DateFormatter";
 import DataTable from "@/components/DataTable";
@@ -17,16 +23,22 @@ import EditDeliveryDateModal from "./EditDeliveryDateModal";
 import AddAlternativeItemModal from "./AddAlternativeItemModal";
 import AddTicketModal from "@/components/tickets/AddTicketModal";
 import OrderTicketsModal from "../open-orders/OrderTicketsModal";
-import { OpenOrders } from "@/shared/schema";
+import {
+  MappedOpenOrder,
+  MappedOpenOrderGrouped,
+  MappedOrdersGroupedAdditional,
+  MappedAlternativeItem
+} from "@/features/orders/types/mappings";
+import { Ticket } from '@/features/tickets/types/models';
 
 export default function OrderDetailsPage() {
-  const [, params] = useRoute("/order-details/:artikelNr");
+  const [, params] = useRoute("/order-details/:itemNumber");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
-  const artikelNr = params ? parseInt(params.artikelNr) : 0;
+  const itemNumber = params ? parseInt(params.itemNumber) : 0;
 
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isDeliveryDateModalOpen, setIsDeliveryDateModalOpen] = useState(false);
@@ -39,97 +51,60 @@ export default function OrderDetailsPage() {
   const [isOrderTicketsModalOpen, setIsOrderTicketsModalOpen] = useState(false);
 
   // Fetch individual orders for this item number
-  const { data: orders = [], isLoading: isLoadingOrders } = useQuery({
-    queryKey: [`/api/orders/by-itemnr/${artikelNr}`],
+  const { data: rawOrders = [], isLoading: isLoadingOrders } = useQuery({
+    queryKey: ['orders', itemNumber],
     queryFn: async () => {
-      try {
-        return await OrdersService.getOpenOrdersByArtikelNr(artikelNr);
-      } catch (error) {
-        console.error("Failed to fetch orders:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load order details. Please try again.",
-          variant: "destructive",
-        });
-        return [];
-      }
-    }
+      const orders = await OrdersService.getOpenOrdersByItemNumber(itemNumber);
+      return orders.map(mapOpenOrder);
+    },
+    enabled: !!itemNumber,
   });
 
-  // Fetch grouped order info for this item number
-  const { data: groupedInfo } = useQuery({
-    queryKey: ['/api/orders/grouped', artikelNr],
+  // Fetch grouped orders
+  const { data: rawGroupedOrders = [], isLoading: isLoadingGrouped } = useQuery({
+    queryKey: ['groupedOrders'],
     queryFn: async () => {
-      try {
-        const allGroupedResponse = await OrdersService.getOpenOrdersGrouped();
-        // Process the response to handle both array and object formats
-        const allGrouped = Array.isArray(allGroupedResponse)
-          ? allGroupedResponse
-          : 'items' in allGroupedResponse
-            ? allGroupedResponse.items
-            : [];
-
-        console.log('Order details - fetched grouped info:', {
-          allGrouped,
-          artikelNr,
-          matchedItem: allGrouped.find((item: any) => item.ArtikelNr === artikelNr)
-        });
-
-        return allGrouped.find((item: any) => item.ArtikelNr === artikelNr) || null;
-      } catch (error) {
-        console.error("Failed to fetch grouped order info:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load item information. Please try again.",
-          variant: "destructive",
-        });
-        return null;
-      }
-    }
+      const response = await OrdersService.getOpenOrdersGrouped();
+      const orders = Array.isArray(response) ? response : response.items;
+      return orders.map(mapOpenOrderGrouped);
+    },
   });
 
-  // Fetch additional data for this item number
-  const { data: additionalInfo, refetch: refetchAdditional } = useQuery({
-    queryKey: [`/api/orders/additional/${artikelNr}`],
+  // Fetch additional data
+  const { data: additionalData, isLoading: isLoadingAdditional } = useQuery({
+    queryKey: ['additionalData', itemNumber],
     queryFn: async () => {
-      try {
-        return await OrdersAdditionalService.getOrderAdditionalByArtikelNr(artikelNr);
-      } catch (error) {
-        console.error("Failed to fetch additional info:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load delivery dates and alternatives. Please try again.",
-          variant: "destructive",
-        });
-        return null;
-      }
-    }
+      const data = await OrdersAdditionalService.getOrderAdditional(itemNumber);
+      return data ? {
+        ...data,
+        alternativeItems: data.alternativeItems?.map(item => ({
+          orderItemNumber: item.orderArtikelNr,
+          alternativeItemNumber: item.alternativeArtikelNr,
+          alternativeItemName: item.alternativeArtikel
+        })) || []
+      } : null;
+    },
+    enabled: !!itemNumber,
   });
 
-  // Fetch tickets for this item number
-  const { data: tickets = [], refetch: refetchTickets } = useQuery({
-    queryKey: [`/api/tickets/by-itemnr/${artikelNr}`],
+  // Fetch tickets
+  const { data: tickets = [], isLoading: isLoadingTickets } = useQuery({
+    queryKey: ['tickets', itemNumber],
     queryFn: async () => {
-      try {
-        return await TicketsService.getTicketsByArtikelNr(artikelNr);
-      } catch (error) {
-        console.error("Failed to fetch tickets:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load tickets. Please try again.",
-          variant: "destructive",
-        });
-        return [];
-      }
-    }
+      return await TicketsService.getTicketsByItemNumber(itemNumber);
+    },
+    enabled: !!itemNumber,
   });
+
+  // Find the matching grouped order for this item
+  const groupedInfo = rawGroupedOrders.find((order: MappedOpenOrderGrouped) => order.itemNumber === itemNumber);
 
   // Redirect if invalid item number
   useEffect(() => {
-    if (!artikelNr) {
+    if (!itemNumber) {
       navigate("/open-orders");
     }
-  }, [artikelNr, navigate]);
+  }, [itemNumber, navigate]);
 
   // Handle adding a ticket
   const handleAddTicket = () => {
@@ -147,30 +122,20 @@ export default function OrderDetailsPage() {
   };
 
   // Handle removing alternative item
-  const handleRemoveAlternative = async (altArtikelNr: number) => {
+  const handleRemoveAlternative = async (altItemNumber: number) => {
     try {
-      await OrdersAdditionalService.removeAlternativeItem(artikelNr, altArtikelNr);
-
-      // Invalidate all queries that might use this data
-      if (queryClient) {
-        // Invalidate order details page queries
-        queryClient.invalidateQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
-        // Invalidate open orders page queries to update the alternative items indicator
-        queryClient.invalidateQueries({ queryKey: ['/api/orders/additional'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/orders/grouped'] });
-      }
-
-      refetchAdditional();
+      await OrdersAdditionalService.removeAlternativeItem(itemNumber, altItemNumber);
+      queryClient.invalidateQueries({ queryKey: ['additionalData', itemNumber] });
       toast({
         title: t('common.success'),
-        description: t('orders.alternativeItemRemoved', "Alternative item removed successfully"),
+        description: t('orders.alternativeItemRemoved'),
       });
     } catch (error) {
-      console.error("Failed to remove alternative item:", error);
+      console.error('Error removing alternative item:', error);
       toast({
         title: t('common.error'),
-        description: t('orders.failedToRemoveItem', "Failed to remove alternative item. Please try again."),
-        variant: "destructive",
+        description: t('orders.failedToRemoveAlternative'),
+        variant: 'destructive',
       });
     }
   };
@@ -181,13 +146,13 @@ export default function OrderDetailsPage() {
   };
 
   // Handle opening order-specific tickets modal
-  const handleViewOrderTickets = (bestellNr: number) => {
-    setSelectedOrderId(bestellNr);
+  const handleViewOrderTickets = (orderNumber: number) => {
+    setSelectedOrderId(orderNumber);
     setIsOrderTicketsModalOpen(true);
   };
 
   // Get delivery date status for styling
-  const deliveryDate = additionalInfo?.newDeliveryDate || groupedInfo?.Erstelldatum || "";
+  const deliveryDate = additionalData?.newDeliveryDate || groupedInfo?.creationDate || "";
   const dateStatus = getDeliveryDateStatus(deliveryDate);
   const dateColor =
     dateStatus === 'danger' ? 'text-danger font-medium' :
@@ -198,37 +163,38 @@ export default function OrderDetailsPage() {
   const columns = [
     {
       header: t('orders.orderNumber'),
-      accessor: (row: OpenOrders) => row.BestellNr,
-      cell: (value: number) => (
-        <span className="font-mono">{value}</span>
+      accessor: (row: MappedOpenOrder | MappedOpenOrderGrouped) => 'orderNumber' in row ? row.orderNumber : undefined,
+      cell: (value: number | undefined) => (
+        <span className="font-mono">{value ?? '-'}</span>
       ),
       sortable: true
     },
     {
       header: t('orders.creationDate'),
-      accessor: (row: OpenOrders) => row.Erstelldatum,
+      accessor: (row: MappedOpenOrder | MappedOpenOrderGrouped) => row.creationDate,
       cell: (value: string) => <DateFormatter date={value} withTime={true} />,
       sortable: true
     },
     {
       header: t('orders.quantity'),
-      accessor: (row: OpenOrders) => row.Anzahl,
+      accessor: (row: MappedOpenOrder | MappedOpenOrderGrouped) => row.quantity,
       sortable: true
     },
     {
       header: t('common.tickets'),
-      accessor: (row: OpenOrders) => {
-        // Check if there are tickets for this order
-        const orderTickets = tickets.filter(ticket =>
-          ticket.bestellNr && ticket.bestellNr.toString() === row.BestellNr.toString()
+      accessor: (row: MappedOpenOrder | MappedOpenOrderGrouped) => {
+        if (!('orderNumber' in row)) return { count: 0, orderNumber: undefined };
+        
+        const orderTickets = tickets.filter((ticket: Ticket) =>
+          ticket.bestellNr && ticket.bestellNr.toString() === row.orderNumber.toString()
         );
         return {
           count: orderTickets.length,
-          bestellNr: row.BestellNr
+          orderNumber: row.orderNumber
         };
       },
-      cell: (value: { count: number, bestellNr: number }) => {
-        if (!value) {
+      cell: (value: { count: number, orderNumber?: number }) => {
+        if (!value || !value.orderNumber) {
           return <span className="text-muted-foreground">-</span>;
         }
 
@@ -236,8 +202,8 @@ export default function OrderDetailsPage() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (value.count > 0) {
-                handleViewOrderTickets(value.bestellNr);
+              if (value.count > 0 && value.orderNumber) {
+                handleViewOrderTickets(value.orderNumber);
               }
             }}
             className="flex items-center justify-center p-1"
@@ -254,14 +220,14 @@ export default function OrderDetailsPage() {
     },
     {
       header: t('orders.status'),
-      accessor: (row: OpenOrders) => row.BestellStatus,
-      cell: (value: string) => {
+      accessor: (row: MappedOpenOrder | MappedOpenOrderGrouped) => 'orderStatus' in row ? row.orderStatus : undefined,
+      cell: (value: string | undefined) => {
         if (!value || value === '0' || value === '') {
           return <Badge variant="awaiting">{t('statusLabels.unknown', 'Status Unknown')}</Badge>;
         }
 
         // Determine the badge variant
-        const getBadgeVariant = (status: string): string => {
+        const getBadgeVariant = (status: string): "default" | "destructive" | "scheduled" | "procurement" | "fulfillment" | "shipped" | "awaiting" | "backordered" => {
           const normalizedStatus = status.trim().toUpperCase();
 
           if (normalizedStatus === "SCHEDULED")
@@ -285,11 +251,21 @@ export default function OrderDetailsPage() {
         const variant = getBadgeVariant(value);
         const label = value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-        return <Badge variant={variant as any}>{label}</Badge>;
+        return <Badge variant={variant}>{label}</Badge>;
       },
       sortable: true
     }
   ];
+
+  // Group orders by product group
+  const groupedOrders = rawOrders.reduce((acc, order) => {
+    const group = order.productGroup || 'Other';
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(order);
+    return acc;
+  }, {} as Record<string, MappedOpenOrder[]>);
 
   if (!groupedInfo) {
     return (
@@ -313,13 +289,13 @@ export default function OrderDetailsPage() {
             {/* Left: Title and item info */}
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0 w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-lg font-bold text-muted-foreground">
-                {groupedInfo?.Hrs?.charAt(0) || '?'}
+                {groupedInfo?.supplier?.charAt(0) || '?'}
               </div>
               <div>
-                <h1 className="text-lg font-bold text-foreground">{groupedInfo?.Artikel}</h1>
+                <h1 className="text-lg font-bold text-foreground">{groupedInfo?.itemName}</h1>
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-medium">{groupedInfo?.Hrs}</span> •
-                  <span className="ml-1 font-mono">#{groupedInfo?.ArtikelNr}</span>
+                  <span className="font-medium">{groupedInfo?.supplier}</span> •
+                  <span className="ml-1 font-mono">#{groupedInfo?.itemNumber}</span>
                 </div>
               </div>
             </div>
@@ -350,18 +326,21 @@ export default function OrderDetailsPage() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
             <div className="bg-muted/30 rounded p-2">
               <div className="text-xs font-medium text-muted-foreground">{t('orders.itemNumber')}</div>
-              <div className="text-sm font-mono font-medium">{groupedInfo?.ArtikelNr}</div>
+              <div className="text-sm font-mono font-medium">{groupedInfo?.itemNumber}</div>
             </div>
             <div className="bg-muted/30 rounded p-2">
               <div className="text-xs font-medium text-muted-foreground">{t('orders.brand')}</div>
-              <div className="text-sm font-medium">{groupedInfo?.Hrs}</div>
+              <div className="text-sm font-medium">{groupedInfo?.supplier}</div>
             </div>
             <div className="bg-muted/30 rounded p-2">
               <div className="text-xs font-medium text-muted-foreground">{t('orders.productGroup')}</div>
+              <div className="text-sm font-medium">
+                <span className="font-mono">{groupedInfo?.productGroup || t('common.unknownGroup', 'Unknown Group')}</span>
+              </div>
             </div>
             <div className="bg-muted/30 rounded p-2">
               <div className="text-xs font-medium text-muted-foreground">{t('orders.totalOrders')}</div>
-              <div className="text-sm font-medium">{groupedInfo?.Anzahl || 0}</div>
+              <div className="text-sm font-medium">{groupedInfo?.quantity || 0}</div>
             </div>
             <div className="bg-muted/30 rounded p-2">
               <div className="text-xs font-medium text-muted-foreground">{t('common.tickets')}</div>
@@ -403,9 +382,9 @@ export default function OrderDetailsPage() {
                   {deliveryDate ? <DateFormatter date={deliveryDate} withTime={true} /> : t('orders.noDateAvailable', 'No date available')}
                 </span>
 
-                {additionalInfo?.originalDeliveryDate && (
+                {additionalData?.originalDeliveryDate && (
                   <span className="ml-2 text-xs text-muted-foreground line-through">
-                    <DateFormatter date={additionalInfo.originalDeliveryDate} withTime={true} />
+                    <DateFormatter date={additionalData.originalDeliveryDate} withTime={true} />
                   </span>
                 )}
               </div>
@@ -425,18 +404,18 @@ export default function OrderDetailsPage() {
             </div>
 
             <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-              {additionalInfo?.alternativeItems && additionalInfo.alternativeItems.length > 0 ? (
-                additionalInfo.alternativeItems.map(item => (
+              {additionalData?.alternativeItems && additionalData.alternativeItems.length > 0 ? (
+                additionalData.alternativeItems.map(item => (
                   <div
-                    key={item.artikelNr}
+                    key={item.orderItemNumber}
                     className="py-1 px-2 bg-muted/30 rounded flex items-center justify-between"
                   >
                     <div className="truncate mr-2">
-                      <span className="text-xs text-foreground">{item.artikel}</span>
-                      <span className="ml-1 text-xs text-muted-foreground font-mono">#{item.artikelNr}</span>
+                      <span className="text-xs text-foreground">{item.alternativeItemName}</span>
+                      <span className="ml-1 text-xs text-muted-foreground font-mono">#{item.alternativeItemNumber}</span>
                     </div>
                     <ActionIcon
-                      onClick={() => handleRemoveAlternative(item.artikelNr)}
+                      onClick={() => handleRemoveAlternative(item.alternativeItemNumber)}
                       icon={<TrashIcon />}
                       title={t('orders.removeAlternativeItem')}
                       size="sm"
@@ -462,16 +441,16 @@ export default function OrderDetailsPage() {
             <p className="text-xs text-muted-foreground">{t('orders.showingAllOrdersForItem')}</p>
           </div>
           <div className="text-xs bg-muted/40 px-2 py-1 rounded">
-            <span className="font-medium">{orders.length}</span> {t('common.orders')}
+            <span className="font-medium">{rawOrders.length}</span> {t('common.orders')}
           </div>
         </div>
 
         <DataTable
-          data={orders}
+          data={rawOrders}
           columns={columns}
           isLoading={isLoadingOrders}
           searchable={true}
-          searchFields={["BestellNr", "BestellStatus"]}
+          searchFields={["orderNumber", "orderStatus"]}
         />
       </div>
 
@@ -480,12 +459,12 @@ export default function OrderDetailsPage() {
         isOpen={isEmailModalOpen}
         onClose={() => setIsEmailModalOpen(false)}
         itemInfo={{
-          artikelNr,
-          artikel: groupedInfo?.Artikel || "",
-          newDeliveryDate: additionalInfo?.newDeliveryDate || groupedInfo?.Erstelldatum || "",
-          alternatives: additionalInfo?.alternativeItems || []
+          itemNumber,
+          itemName: groupedInfo?.itemName || "",
+          newDeliveryDate: additionalData?.newDeliveryDate || groupedInfo?.creationDate || "",
+          alternatives: additionalData?.alternativeItems || []
         }}
-        orders={orders}
+        orders={rawOrders}
       />
 
       {/* Edit Delivery Date Modal */}
@@ -493,12 +472,12 @@ export default function OrderDetailsPage() {
         isOpen={isDeliveryDateModalOpen}
         onClose={() => setIsDeliveryDateModalOpen(false)}
         onSuccess={() => {
-          refetchAdditional();
+          queryClient.invalidateQueries({ queryKey: ['additionalData', itemNumber] });
           setIsDeliveryDateModalOpen(false);
         }}
-        artikelNr={artikelNr}
-        currentDate={additionalInfo?.newDeliveryDate || groupedInfo?.Erstelldatum || ""}
-        originalDate={additionalInfo?.originalDeliveryDate || groupedInfo?.Erstelldatum || ""}
+        itemNumber={itemNumber}
+        currentDate={additionalData?.newDeliveryDate || groupedInfo?.creationDate || ""}
+        originalDate={additionalData?.originalDeliveryDate || groupedInfo?.creationDate || ""}
       />
 
       {/* Add Alternative Item Modal */}
@@ -506,11 +485,11 @@ export default function OrderDetailsPage() {
         isOpen={isAlternativeModalOpen}
         onClose={() => setIsAlternativeModalOpen(false)}
         onSuccess={() => {
-          refetchAdditional();
+          queryClient.invalidateQueries({ queryKey: ['additionalData', itemNumber] });
           setIsAlternativeModalOpen(false);
         }}
-        artikelNr={artikelNr}
-        currentAlternatives={additionalInfo?.alternativeItems || []}
+        artikelNr={itemNumber}
+        currentAlternatives={additionalData?.alternativeItems || []}
       />
 
       {/* Add Ticket Modal */}
@@ -518,22 +497,11 @@ export default function OrderDetailsPage() {
         isOpen={isAddTicketModalOpen}
         onClose={() => setIsAddTicketModalOpen(false)}
         onSuccess={() => {
-          // Refetch open orders grouped to update ticket count
-          queryClient.invalidateQueries({ queryKey: ['/api/orders/grouped'] });
-          // Refetch tickets
-          queryClient.invalidateQueries({ queryKey: ['/api/tickets'] });
-          queryClient.invalidateQueries({ queryKey: [`/api/tickets/by-itemnr/${artikelNr}`] });
-          refetchTickets();
+          queryClient.invalidateQueries({ queryKey: ['tickets', itemNumber] });
+          queryClient.invalidateQueries({ queryKey: ['additionalData', itemNumber] });
           setIsAddTicketModalOpen(false);
         }}
-        artikelNr={artikelNr}
-      />
-
-      {/* Tickets Modal */}
-      <OrderTicketsModal
-        isOpen={isTicketsModalOpen}
-        onClose={() => setIsTicketsModalOpen(false)}
-        artikelNr={artikelNr}
+        artikelNr={itemNumber}
       />
 
       {/* Order-specific Tickets Modal */}
@@ -544,9 +512,16 @@ export default function OrderDetailsPage() {
             setIsOrderTicketsModalOpen(false);
             setSelectedOrderId(null);
           }}
-          bestellNr={selectedOrderId}
+          orderNumber={selectedOrderId}
         />
       )}
+
+      {/* Item-specific Tickets Modal */}
+      <OrderTicketsModal
+        isOpen={isTicketsModalOpen}
+        onClose={() => setIsTicketsModalOpen(false)}
+        itemNumber={itemNumber}
+      />
     </>
   );
 }
