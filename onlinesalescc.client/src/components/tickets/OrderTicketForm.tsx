@@ -17,12 +17,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { TicketsService } from "@/features/tickets";
-import { OrdersService } from "@/features/orders";
+import { TicketsService, OrdersService } from "@/services/api";
 import { ChevronDown } from "lucide-react";
 import DateFormatter from "@/components/DateFormatter";
 import { DialogFooter } from "@/components/ui/dialog";
-import { MappedOpenOrder } from "@/features/orders/types/mappings";
+import { OpenOrder } from "@/shared/types";
 
 // Define a schema for the form
 const orderTicketFormSchema = z.object({
@@ -34,30 +33,33 @@ const orderTicketFormSchema = z.object({
 
 type OrderTicketFormValues = z.infer<typeof orderTicketFormSchema>;
 
+// Type alias for OpenOrders
+type OpenOrders = OpenOrder;
+
 // Component to render a single order item with article info
 const OrderItemWithArticle = ({
   order,
   onClick,
   index
 }: {
-  order: MappedOpenOrder;
+  order: OpenOrders;
   onClick: () => void;
   index: number;
 }) => {
   return (
     <div
-      key={`order-${order.orderNumber}-${order.itemNumber}-${index}`}
+      key={`order-${order.BestellNr}-${order.ArtikelNr}-${index}`}
       className="flex items-start justify-between p-2 text-sm hover:bg-muted rounded-sm cursor-pointer"
       onClick={onClick}
     >
       <div>
-        <div className="font-medium">{order.orderNumber}</div>
+        <div className="font-medium">{order.BestellNr}</div>
         <div className="text-xs text-muted-foreground flex flex-col">
-          <DateFormatter date={order.creationDate} withTime={true} />
-          <span>#{order.itemNumber} - {order.itemName}</span>
+          <DateFormatter date={order.Erstelldatum} withTime={true} />
+          <span>#{order.ArtikelNr} - {order.Artikel}</span>
         </div>
       </div>
-      <div className="text-xs px-1.5 py-0.5 rounded bg-muted/80">{order.orderStatus}</div>
+      <div className="text-xs px-1.5 py-0.5 rounded bg-muted/80">{order.BestellStatus}</div>
     </div>
   );
 };
@@ -66,7 +68,7 @@ interface OrderTicketFormProps {
   onClose: () => void;
   onSuccess: () => void;
   artikelNr: number;
-  bestellNr?: number | null;
+  bestellNr?: number;
   onLoadTickets: (orderNumber: number) => void;
 }
 
@@ -83,7 +85,7 @@ export default function OrderTicketForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // States for order dropdown
-  const [orders, setOrders] = useState<MappedOpenOrder[]>([]);
+  const [orders, setOrders] = useState<OpenOrders[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [orderDropdownOpen, setOrderDropdownOpen] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
@@ -147,8 +149,8 @@ export default function OrderTicketForm({
 
       // Load related orders for autocomplete
       setIsLoadingOrders(true);
-      OrdersService.getOpenOrdersByItemNumber(artikelNr)
-        .then((data: MappedOpenOrder[]) => {
+      OrdersService.getOpenOrdersByArtikelNr(artikelNr)
+        .then((data) => {
           // Add direct debug log of raw data
           console.log('Raw API response for orders:', data);
           console.log('Type of data:', typeof data);
@@ -161,7 +163,7 @@ export default function OrderTicketForm({
           // Don't automatically open the order selection
           setOrderDropdownOpen(false);
         })
-        .catch((error: Error) => {
+        .catch((error) => {
           console.error("Failed to fetch orders:", error);
           safeSetOrders([]);
         })
@@ -322,7 +324,7 @@ export default function OrderTicketForm({
                   <div className="p-1">
                     {orders.slice(0, 30).map((order, index) => (
                       <OrderItemWithArticle
-                        key={`order-${order.orderNumber}-${order.itemNumber}-${index}`}
+                        key={`order-${order.BestellNr}-${order.ArtikelNr}-${index}`}
                         order={order}
                         index={index}
                         onClick={() => {
@@ -334,7 +336,7 @@ export default function OrderTicketForm({
                           setOrderSearch('');
 
                           // Set the order number value - this is the key fix
-                          const orderNumberStr = String(order.orderNumber);
+                          const orderNumberStr = String(order.BestellNr);
                           console.log('Setting order number to:', orderNumberStr);
 
                           // Update form value
@@ -359,7 +361,7 @@ export default function OrderTicketForm({
                           }, 10);
 
                           // Load tickets for this order
-                          onLoadTickets(order.orderNumber);
+                          onLoadTickets(order.BestellNr);
                         }}
                       />
                     ))}

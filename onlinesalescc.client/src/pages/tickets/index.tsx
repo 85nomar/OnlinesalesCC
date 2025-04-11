@@ -1,10 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TicketsService } from "@/features/tickets";
+import { TicketsService } from "@/services/api";
 import DataTable from "@/components/DataTable";
 import ExpandableText from "@/components/ExpandableText";
 import DateFormatter, { parseAndFormatDate } from "@/components/DateFormatter";
-import { MappedTicket } from "@/features/tickets/types/mappings";
+import type { Ticket } from "@/shared/schema";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +17,7 @@ export default function TicketsPage() {
   const { toast } = useToast();
   const { t } = useTranslation();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [ticketToEdit, setTicketToEdit] = useState<MappedTicket | null>(null);
+  const [ticketToEdit, setTicketToEdit] = useState<Ticket | null>(null);
 
   // Fetch tickets data
   const { data: tickets = [], isLoading, refetch } = useQuery({
@@ -41,7 +41,7 @@ export default function TicketsPage() {
   const columns = [
     {
       header: t('tickets.ticketId', 'Ticket ID'),
-      accessor: (row: MappedTicket) => row.ticketId,
+      accessor: (row: Ticket) => row.ticketId,
       cell: (value: number) => (
         <span className="font-mono">#{value}</span>
       ),
@@ -49,7 +49,7 @@ export default function TicketsPage() {
     },
     {
       header: t('orders.itemNumber', 'Item Number'),
-      accessor: (row: MappedTicket) => row.itemNumber,
+      accessor: (row: Ticket) => row.artikelNr,
       cell: (value: number) => (
         <span className="font-mono">{value}</span>
       ),
@@ -57,7 +57,7 @@ export default function TicketsPage() {
     },
     {
       header: t('orders.orderNumber', 'Order Number'),
-      accessor: (row: MappedTicket) => row.orderNumber,
+      accessor: (row: Ticket) => row.bestellNr,
       cell: (value: number) => (
         <span className="font-mono">{value}</span>
       ),
@@ -65,8 +65,8 @@ export default function TicketsPage() {
     },
     {
       header: t('tickets.comment', 'Comment'),
-      accessor: (row: MappedTicket) => row.comment,
-      cell: (value: string, row: MappedTicket) => (
+      accessor: (row: Ticket) => row.comment,
+      cell: (value: string, row: Ticket) => (
         <div className="h-[3.5rem] py-2 flex items-start">
           <ExpandableText
             text={value}
@@ -75,10 +75,10 @@ export default function TicketsPage() {
             metadata={{
               title: `${t('tickets.ticketId', 'Ticket')} #${row.ticketId}`,
               items: [
-                { label: t('orders.orderNumber', 'Order'), value: `${row.orderNumber}` },
-                { label: t('orders.itemNumber', 'Item'), value: `${row.itemNumber}` },
+                { label: t('orders.orderNumber', 'Order'), value: `${row.bestellNr}` },
+                { label: t('orders.itemNumber', 'Item'), value: `${row.artikelNr}` },
                 { label: t('tickets.createdBy', 'By'), value: row.byUser },
-                { label: t('common.date', 'Date'), value: <DateFormatter date={row.createdAt} withTime={true} /> },
+                { label: t('common.date', 'Date'), value: <DateFormatter date={row.entrydate} withTime={true} /> },
               ]
             }}
           />
@@ -88,19 +88,19 @@ export default function TicketsPage() {
     },
     {
       header: t('tickets.createdBy', 'Created By'),
-      accessor: (row: MappedTicket) => row.byUser,
+      accessor: (row: Ticket) => row.byUser,
       sortable: true
     },
     {
       header: t('tickets.createdAt', 'Creation Date'),
-      accessor: (row: MappedTicket) => row.createdAt,
+      accessor: (row: Ticket) => row.entrydate,
       cell: (value: string) => <DateFormatter date={value} withTime={true} />,
       sortable: true
     },
     {
       header: t('common.actions', 'Actions'),
-      accessor: (row: MappedTicket) => row,
-      cell: (_: any, row: MappedTicket) => (
+      accessor: (row: Ticket) => row,
+      cell: (_: any, row: Ticket) => (
         <div className="flex justify-end space-x-2">
           <ActionIcon
             icon={<PencilIcon />}
@@ -127,7 +127,7 @@ export default function TicketsPage() {
   ];
 
   // Handle editing a ticket
-  const handleEditTicket = (ticket: MappedTicket) => {
+  const handleEditTicket = (ticket: Ticket) => {
     setTicketToEdit(ticket);
     setIsAddModalOpen(true);
   };
@@ -135,7 +135,7 @@ export default function TicketsPage() {
   // Handle deleting a ticket
   const handleDeleteTicket = async (id: string) => {
     try {
-      await TicketsService.deleteTicket(parseInt(id));
+      await TicketsService.deleteTicket(id);
       refetch();
       toast({
         title: t('common.success', 'Success'),
@@ -182,7 +182,7 @@ export default function TicketsPage() {
             columns={columns}
             isLoading={isLoading}
             searchable={true}
-            searchFields={["ticketId", "orderNumber", "itemNumber", "comment", "byUser", "createdAt"]}
+            searchFields={["ticketId", "bestellNr", "artikelNr", "comment", "byUser", "entrydate"]}
           />
         </div>
       </div>

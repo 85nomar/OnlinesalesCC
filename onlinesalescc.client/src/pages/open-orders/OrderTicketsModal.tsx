@@ -3,66 +3,81 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { TicketsService } from "@/features/tickets";
-import { OrdersService } from "@/features/orders";
+import type { Ticket } from "@/shared/schema";
+import { TicketsService } from "@/services/tickets.service";
+import { OrdersService } from "@/services/orders.service";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Ticket as TicketIcon, Trash, Plus } from "lucide-react";
+import { Loader2, X, Ticket as TicketIcon, Edit, Trash, Plus } from "lucide-react";
 import DateFormatter from "@/components/DateFormatter";
 import { useTranslation } from "react-i18next";
 import { TooltipWrapper } from "@/components/ui/tooltip-wrapper";
 import AddTicketModal from "@/components/tickets/AddTicketModal";
-import { MappedTicket } from "@/features/tickets/types/mappings";
-import { MappedOpenOrderGrouped } from "@/features/orders/types/mappings";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface OrderTicketsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  itemNumber?: number;
-  orderNumber?: number;
+  artikelNr?: number;
+  bestellNr?: number;
 }
 
 export default function OrderTicketsModal({
   isOpen,
   onClose,
-  itemNumber,
-  orderNumber,
+  artikelNr,
+  bestellNr
 }: OrderTicketsModalProps) {
   const { toast } = useToast();
   const { t } = useTranslation();
-  const [tickets, setTickets] = useState<MappedTicket[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [itemName, setItemName] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isAddTicketModalOpen, setIsAddTicketModalOpen] = useState(false);
 
+  // Fetch tickets for this artikel number or bestellNr
   useEffect(() => {
     const fetchTickets = async () => {
-      if (!isOpen) return;
-      let fetchedTickets: MappedTicket[] = [];
-      let title = '';
+      if ((!artikelNr && !bestellNr) || !isOpen) return;
 
+      setIsLoading(true);
       try {
-        if (orderNumber) {
-          fetchedTickets = await TicketsService.getTicketsByOrderNumber(orderNumber);
-          title = t('tickets.ticketsForOrder', 'Tickets for Order') + ` #${orderNumber}`;
-        } else if (itemNumber) {
-          fetchedTickets = await TicketsService.getTicketsByItemNumber(itemNumber);
+        let fetchedTickets: Ticket[] = [];
+        let title = "";
+
+        if (bestellNr) {
+          // Fetch tickets by order number
+          fetchedTickets = await TicketsService.getTicketsByBestellNr(bestellNr);
+          title = `Order #${bestellNr}`;
+        } else if (artikelNr) {
+          // Fetch tickets by item number
+          fetchedTickets = await TicketsService.getTicketsByArtikelNr(artikelNr);
+
+          // Get item name for the title
           const ordersData = await OrdersService.getOpenOrdersGrouped();
-          const groupedOrders = Array.isArray(ordersData) ? ordersData : [];
-          const itemInfo = groupedOrders.find((item) => item.itemNumber === itemNumber);
-          title = itemInfo?.itemName || t('tickets.ticketsForItem', 'Tickets for Item') + ` #${itemNumber}`;
+          const allGrouped = Array.isArray(ordersData)
+            ? ordersData
+            : 'items' in ordersData
+              ? ordersData.items
+              : [];
+
+          const itemInfo = allGrouped.find((order: any) => order.ArtikelNr === artikelNr);
+          if (itemInfo) {
+            title = itemInfo.Artikel;
+          }
         }
+
         setTickets(fetchedTickets);
         setItemName(title);
+
       } catch (error) {
-        console.error('Error fetching tickets:', error);
+        console.error("Failed to fetch tickets:", error);
         toast({
-          title: t('common.error'),
-          description: t('tickets.fetchError'),
-          variant: 'destructive',
+          title: "Error",
+          description: "Failed to load tickets. Please try again.",
+          variant: "destructive",
         });
       } finally {
         setIsLoading(false);
@@ -70,31 +85,21 @@ export default function OrderTicketsModal({
     };
 
     fetchTickets();
-  }, [itemNumber, orderNumber, isOpen, toast, t]);
+  }, [artikelNr, bestellNr, isOpen, toast]);
 
-  const handleRefresh = async () => {
-    setIsLoading(true);
-    try {
-      if (orderNumber) {
-        const refreshedTickets = await TicketsService.getTicketsByOrderNumber(orderNumber);
-        setTickets(refreshedTickets);
-      } else if (itemNumber) {
-        const refreshedTickets = await TicketsService.getTicketsByItemNumber(itemNumber);
-        setTickets(refreshedTickets);
-      }
-      toast({
-        title: t('common.success'),
-        description: t('tickets.refreshSuccess'),
-      });
-    } catch (error) {
-      console.error('Error refreshing tickets:', error);
-      toast({
-        title: t('common.error'),
-        description: t('tickets.refreshError'),
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
+  // Refresh tickets after adding a new one
+  const handleTicketSuccess = () => {
+    setIsAddTicketModalOpen(false);
+
+    // Refresh tickets list
+    if (bestellNr) {
+      TicketsService.getTicketsByBestellNr(bestellNr)
+        .then(tickets => setTickets(tickets))
+        .catch(error => console.error("Failed to refresh tickets:", error));
+    } else if (artikelNr) {
+      TicketsService.getTicketsByArtikelNr(artikelNr)
+        .then(tickets => setTickets(tickets))
+        .catch(error => console.error("Failed to refresh tickets:", error));
     }
   };
 
@@ -104,27 +109,30 @@ export default function OrderTicketsModal({
       await TicketsService.deleteTicket(ticketId);
       setTickets(prevTickets => prevTickets.filter(ticket => ticket.ticketId !== ticketId));
       toast({
-        title: t('common.success'),
-        description: t('tickets.deletedSuccessfully', 'Ticket deleted successfully'),
+        title: "Success",
+        description: "Ticket deleted successfully",
       });
     } catch (error) {
       console.error("Failed to delete ticket:", error);
       toast({
-        title: t('common.error'),
-        description: t('tickets.failedToDelete', 'Failed to delete ticket. Please try again.'),
+        title: "Error",
+        description: "Failed to delete ticket. Please try again.",
         variant: "destructive",
       });
     }
   };
 
   return (
-    <ErrorBoundary fallback={<div className="p-4 text-destructive">{t('common.error')}</div>}>
+    <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-md md:max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <TicketIcon className="h-5 w-5 text-primary" />
-              {itemName}
+              {bestellNr
+                ? t('tickets.ticketsForOrder', 'Tickets for Order') + ` #${bestellNr}`
+                : t('tickets.ticketsFor', 'Tickets for') + ` "${itemName}"`
+              }
             </DialogTitle>
           </DialogHeader>
 
@@ -156,25 +164,29 @@ export default function OrderTicketsModal({
                       <div>
                         <p className="text-sm text-gray-900 dark:text-white">{ticket.comment}</p>
                         <div className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">
-                          <span className="font-mono mr-2">
-                            {ticket.orderNumber
-                              ? t('tickets.orderNumber', 'Order') + ` #${ticket.orderNumber}`
-                              : t('tickets.noOrderNumber', 'No Order Number')}
-                          </span>
+                          <span className="font-mono mr-2">Order #{ticket.bestellNr}</span>
                           <span className="mr-2">·</span>
-                          <span>{t('tickets.createdBy', 'Created by')}: {ticket.byUser || t('common.systemUser', 'System User')}</span>
+                          <span>Created by: {ticket.byUser}</span>
                           <span className="mr-2 ml-2">·</span>
-                          <span><DateFormatter date={ticket.createdAt ?? null} withTime={true} /></span>
+                          <span><DateFormatter date={ticket.entrydate ?? null} withTime={true} /></span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <TooltipWrapper content={t('common.delete', 'Delete')}>
+                      <div className="flex space-x-2">
+                        <TooltipWrapper content="common.editTicket">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Edit className="h-4 w-4 text-primary" />
+                            <span className="sr-only">{t('common.editTicket')}</span>
+                          </Button>
+                        </TooltipWrapper>
+                        <TooltipWrapper content="common.deleteTicket">
                           <Button
                             variant="ghost"
-                            size="icon"
+                            size="sm"
+                            className="h-8 w-8 p-0"
                             onClick={() => handleDeleteTicket(ticket.ticketId)}
                           >
-                            <Trash className="h-4 w-4" />
+                            <Trash className="h-4 w-4 text-red-500" />
+                            <span className="sr-only">{t('common.deleteTicket')}</span>
                           </Button>
                         </TooltipWrapper>
                       </div>
@@ -184,16 +196,23 @@ export default function OrderTicketsModal({
               </ul>
             </div>
           )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              {t('common.close')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Add Ticket Modal */}
       <AddTicketModal
         isOpen={isAddTicketModalOpen}
         onClose={() => setIsAddTicketModalOpen(false)}
-        onSuccess={handleRefresh}
-        itemNumber={itemNumber}
-        orderNumber={orderNumber}
+        onSuccess={handleTicketSuccess}
+        artikelNr={artikelNr}
+        bestellNr={bestellNr}
       />
-    </ErrorBoundary>
+    </>
   );
 }

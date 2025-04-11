@@ -1,8 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { TicketsService } from "@/features/tickets";
-import { OrdersService, OrdersAdditionalService } from "@/features/orders";
+import { TicketsService, OrdersService, OrdersAdditionalService } from "@/services/api";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,50 +16,12 @@ import {
   ArrowUpRight,
   Plus,
   Ticket,
-  CalendarClock,
-  Info,
-  Activity,
-  Box,
-  Boxes
+  CalendarClock
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DateFormatter from "@/components/DateFormatter";
-import { MappedOpenOrderGrouped } from "@/features/orders/types/mappings";
-import { MappedTicket } from "@/features/tickets/types/mappings";
-import { MappedOrdersGroupedAdditional } from "@/features/orders/types/mappings";
-import {
-  BarChart as RechartsBarChart,
-  Bar,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Sector,
-} from "recharts";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { toast } from "@/components/ui/use-toast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  AreaChart, 
-  BarChart2, 
-  ChevronRight, 
-  CircleOff, 
-  DollarSign, 
-  Download, 
-  ExternalLink, 
-  Loader2,
-  PackageOpen,  
-  ShoppingCart 
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { getDeliveryDateStatus } from "@/lib/utils";
+import { OpenOrdersGrouped } from "@/lib/mockData";
 
 // Define interface for simplified paginated response - matches server's actual return format
 interface SimpleResponse<T> {
@@ -68,47 +29,13 @@ interface SimpleResponse<T> {
   totalCount: number;
 }
 
-// Calculate aggregates from the orders data
-function calculateOrderStats(orders: MappedOpenOrderGrouped[]) {
-  return {
-    totalOrders: orders.length,
-    totalItems: orders.reduce((sum, order) => sum + (order.quantity || 0), 0),
-    pendingOrders: orders.filter(order => 
-      order.status && 
-      !order.status.toUpperCase().includes('SHIPPED') && 
-      !order.status.toUpperCase().includes('DELIVERED')
-    ).length,
-  };
-}
-
-// Type alias for the orders response which can be either an array or a paginated object
-type OrdersResponse = MappedOpenOrderGrouped[] | SimpleResponse<MappedOpenOrderGrouped>;
-
-// Local mock data instead of importing from external file
-const dashboardCards = [
-  { title: 'Orders', value: '123', icon: Package },
-  { title: 'Tickets', value: '45', icon: Ticket },
-  { title: 'Items', value: '678', icon: Box }
-];
-
-const itemStatuses = [
-  { name: 'In Stock', value: 68 },
-  { name: 'Back Order', value: 21 },
-  { name: 'Discontinued', value: 11 }
-];
-
-const popularItems = [
-  { id: 1, name: 'Widget A', count: 42 },
-  { id: 2, name: 'Gadget B', count: 36 },
-  { id: 3, name: 'Tool C', count: 29 }
-];
-
-const orders = []; // Empty array as fallback
+// Define type for orders response
+type OrdersResponse = OpenOrdersGrouped[] | SimpleResponse<OpenOrdersGrouped>;
 
 /**
  * Ticket Monthly Trend Chart Component - Redesigned Version
  */
-const TicketMonthlyTrendChart = ({ tickets, isLoading }: { tickets: MappedTicket[], isLoading: boolean }) => {
+const TicketMonthlyTrendChart = ({ tickets, isLoading }: { tickets: any[], isLoading: boolean }) => {
   const { t } = useTranslation();
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -134,7 +61,7 @@ const TicketMonthlyTrendChart = ({ tickets, isLoading }: { tickets: MappedTicket
   // Count tickets in each month
   if (tickets && tickets.length > 0) {
     tickets.forEach(ticket => {
-      const dateStr = ticket.createdAt;
+      const dateStr = ticket.entrydate;
       if (!dateStr) return;
 
       try {
@@ -200,31 +127,30 @@ const TicketMonthlyTrendChart = ({ tickets, isLoading }: { tickets: MappedTicket
 /**
  * Tickets by Item Distribution Component 
  */
-const TicketsByItemDistribution = ({ tickets, isLoading }: { tickets: MappedTicket[], isLoading: boolean }) => {
+const TicketsByItemDistribution = ({ tickets, isLoading }: { tickets: any[], isLoading: boolean }) => {
   const { t } = useTranslation();
   const stats = useMemo(() => {
     if (!tickets || tickets.length === 0) {
       return [];
     }
 
-    // Group tickets by itemNumber and count
-    const itemCounts: Record<string, number> = {};
+    // Group tickets by artikelNr and count
+    const itemCounts: Record<number, number> = {};
 
     tickets.forEach(ticket => {
-      const itemNumber = ticket.itemNumber;
-      if (itemNumber) {
-        const key = String(itemNumber);
-        if (!itemCounts[key]) {
-          itemCounts[key] = 0;
+      const artikelNr = ticket.artikelNr;
+      if (artikelNr) {
+        if (!itemCounts[artikelNr]) {
+          itemCounts[artikelNr] = 0;
         }
-        itemCounts[key]++;
+        itemCounts[artikelNr]++;
       }
     });
 
     // Convert to array and sort by count (descending)
     const sortedItems = Object.entries(itemCounts)
-      .map(([itemNumber, count]) => ({
-        itemNumber: Number(itemNumber),
+      .map(([artikelNr, count]) => ({
+        artikelNr: Number(artikelNr),
         count
       }))
       .sort((a, b) => b.count - a.count)
@@ -254,9 +180,9 @@ const TicketsByItemDistribution = ({ tickets, isLoading }: { tickets: MappedTick
         {t('dashboard.top5ItemsWithMostTickets', 'Top 5 items with the most tickets')}
       </div>
       {stats.map((item) => (
-        <div key={item.itemNumber} className="space-y-1">
+        <div key={item.artikelNr} className="space-y-1">
           <div className="flex justify-between items-center text-xs">
-            <span className="font-medium">{t('common.itemNumber', 'Item #')}{item.itemNumber}</span>
+            <span className="font-medium">{t('common.itemNumber', 'Item #')}{item.artikelNr}</span>
             <span>{item.count} {t('common.ticketsLowercase', 'tickets')}</span>
           </div>
           <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
@@ -274,16 +200,16 @@ const TicketsByItemDistribution = ({ tickets, isLoading }: { tickets: MappedTick
 /**
  * RecentTickets Component
  */
-const RecentTickets = ({ tickets, isLoading }: { tickets: MappedTicket[], isLoading: boolean }) => {
+const RecentTickets = ({ tickets, isLoading }: { tickets: any[], isLoading: boolean }) => {
   const { t } = useTranslation();
   // Sort tickets by creation date (newest first) and take latest 5
   const recentTickets = useMemo(() => {
     if (!tickets) return [];
     return [...tickets]
       .sort((a, b) => {
-        const dateA = a.createdAt;
-        const dateB = b.createdAt;
-        return new Date(dateB || '').getTime() - new Date(dateA || '').getTime();
+        const dateA = a.entrydate;
+        const dateB = b.entrydate;
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
       })
       .slice(0, 5);
   }, [tickets]);
@@ -316,17 +242,17 @@ const RecentTickets = ({ tickets, isLoading }: { tickets: MappedTicket[], isLoad
               <div className="text-xs text-muted-foreground flex gap-2">
                 <span className="font-mono">#{ticket.ticketId}</span>
                 <span>•</span>
-                <span>{t('common.itemNumber', 'Item #')}{ticket.itemNumber}</span>
-                {ticket.orderNumber && (
+                <span>{t('common.itemNumber', 'Item #')}{ticket.artikelNr}</span>
+                {ticket.bestellNr && (
                   <>
                     <span>•</span>
-                    <span>{t('common.orderNumber', 'Order #')}{ticket.orderNumber}</span>
+                    <span>{t('common.orderNumber', 'Order #')}{ticket.bestellNr}</span>
                   </>
                 )}
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
-              <DateFormatter date={ticket.createdAt ?? ''} withTime={true} />
+              <DateFormatter date={ticket.entrydate ?? null} withTime={true} />
             </div>
           </div>
         </div>
@@ -380,10 +306,10 @@ const WeeklyOrdersTrendChart = ({ orders, isLoading }: {
     }
 
     // Count orders per week
-    normalizedOrders.forEach((order: MappedOpenOrderGrouped) => {
-      if (!order.creationDate) return;
+    normalizedOrders.forEach((order: OpenOrdersGrouped) => {
+      if (!order.Erstelldatum) return;
 
-      const orderDate = new Date(order.creationDate);
+      const orderDate = new Date(order.Erstelldatum);
       for (const week of weeks) {
         if (orderDate >= week.start && orderDate <= week.end) {
           week.count++;
@@ -439,7 +365,7 @@ const UpcomingDeliveries = ({
   isLoading
 }: {
   orders: OrdersResponse | undefined;
-  additionalInfo: MappedOrdersGroupedAdditional[];
+  additionalInfo: any[];
   isLoading: boolean;
 }) => {
   const { t } = useTranslation();
@@ -458,30 +384,33 @@ const UpcomingDeliveries = ({
 
     console.log("UpcomingDeliveries - normalizedOrders:", normalizedOrders);
     console.log("UpcomingDeliveries - additionalInfo with delivery dates:",
-      additionalInfo.filter(info => info.newDeliveryDate));
+      additionalInfo.filter(info => info.newDeliveryDate || info.NewDeliveryDate));
 
-    // Check for delivery dates
-    const hasNewDeliveryDate = (info: MappedOrdersGroupedAdditional) =>
-      info.newDeliveryDate;
+    // Check for different possible property names in additionalInfo
+    const hasNewDeliveryDate = (info: any) =>
+      (info.newDeliveryDate || info.NewDeliveryDate);
 
     // Get all orders with delivery dates
     const ordersWithDates = additionalInfo
       .filter(hasNewDeliveryDate)
       .map(info => {
         // Find the corresponding order
-        const itemNumber = info.itemNumber;
-        const order = normalizedOrders.find(order => order.itemNumber === itemNumber);
+        const artikelNr = info.ArtikelNr || info.artikelNr;
+        const order = normalizedOrders.find(order => order.ArtikelNr === artikelNr);
+
+        // Get the delivery date regardless of property casing
+        const deliveryDate = info.newDeliveryDate || info.NewDeliveryDate;
 
         return {
-          itemNumber: itemNumber,
-          itemName: order?.itemName || `${t('common.itemNumber', 'Item #')}${itemNumber}`,
-          deliveryDate: info.newDeliveryDate,
-          supplier: order?.supplier || t('common.unknown', 'Unknown'),
-          status: getDeliveryDateStatus(info.newDeliveryDate)
+          artikelNr: artikelNr,
+          artikel: order?.Artikel || `${t('common.itemNumber', 'Item #')}${artikelNr}`,
+          deliveryDate: deliveryDate,
+          hrs: order?.Hrs || t('common.unknown', 'Unknown'),
+          status: getDeliveryDateStatus(deliveryDate)
         };
       })
       // Sort by delivery date, nearest first
-      .sort((a, b) => new Date(a.deliveryDate || '').getTime() - new Date(b.deliveryDate || '').getTime())
+      .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime())
       .slice(0, 5);
 
     console.log("UpcomingDeliveries - final ordersWithDates:", ordersWithDates);
@@ -514,23 +443,22 @@ const UpcomingDeliveries = ({
   return (
     <div className="space-y-2">
       {upcomingDeliveries.map((delivery) => (
-        <div key={delivery.itemNumber} className="p-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors">
+        <div key={delivery.artikelNr} className="p-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors">
           <div className="flex justify-between items-start">
             <div>
-              <Link href={`/order-details/${delivery.itemNumber}`}>
-                <div className="text-sm font-medium hover:underline cursor-pointer">{delivery.itemName}</div>
+              <Link href={`/order-details/${delivery.artikelNr}`}>
+                <div className="text-sm font-medium hover:underline cursor-pointer">{delivery.artikel}</div>
               </Link>
               <div className="text-xs text-muted-foreground flex gap-2">
-                <span className="font-mono">#{delivery.itemNumber}</span>
+                <span className="font-mono">#{delivery.artikelNr}</span>
                 <span>•</span>
-                <span>{delivery.supplier}</span>
+                <span>{delivery.hrs}</span>
               </div>
             </div>
-            <div className={`text-xs font-medium ${
-              getDeliveryDateStatus(delivery.deliveryDate) === 'delayed' ? 'text-red-500' :
-              getDeliveryDateStatus(delivery.deliveryDate) === 'soon' ? 'text-amber-500' : 
-              'text-green-500'
-            }`}>
+            <div className={`text-xs font-medium ${delivery.status === 'danger' ? 'text-red-500' :
+              delivery.status === 'warning' ? 'text-amber-500' :
+                'text-green-500'
+              }`}>
               <DateFormatter date={delivery.deliveryDate} withTime={false} />
             </div>
           </div>
@@ -538,24 +466,6 @@ const UpcomingDeliveries = ({
       ))}
     </div>
   );
-};
-
-// Define delivery date status function
-const getDeliveryDateStatus = (deliveryDate: string | Date | null | undefined): 'upcoming' | 'soon' | 'delayed' => {
-  if (!deliveryDate) return 'delayed';
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const targetDate = typeof deliveryDate === 'string' ? new Date(deliveryDate) : deliveryDate instanceof Date ? deliveryDate : new Date();
-  targetDate.setHours(0, 0, 0, 0);
-  
-  const timeDiff = targetDate.getTime() - today.getTime();
-  const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-  
-  if (daysDiff < 0) return 'delayed';
-  if (daysDiff <= 3) return 'soon';
-  return 'upcoming';
 };
 
 /**
@@ -577,25 +487,20 @@ export default function HomeDashboard() {
     }
   });
 
-  // Fetch orders
+  // Fetch open orders grouped with pagination
   const { data: ordersResponse, isLoading: isLoadingOrders } = useQuery({
-    queryKey: ['openOrdersGrouped'],
+    queryKey: ['/api/orders/grouped'],
     queryFn: async () => {
       try {
-        // Get orders without pagination - dashboard only needs summary data
-        const result = await OrdersService.getOpenOrdersGrouped();
+        // Get first page of orders with pagination - more than enough for a dashboard view
+        const result = await OrdersService.getOpenOrdersGrouped(1, 100);
         console.log("Dashboard orders response:", result);
         return result;
       } catch (error) {
         console.error("Failed to fetch orders:", error);
-        toast({
-          title: t('common.error'),
-          description: t('orders.fetchError'),
-          variant: "destructive",
-        });
-        return [];
+        return { items: [], totalCount: 0 };
       }
-    },
+    }
   });
 
   // Process the orders data (handle both array and paginated formats)
@@ -628,14 +533,14 @@ export default function HomeDashboard() {
     return 0;
   }, [ordersResponse]);
 
-  // Fetch additional data
-  const { data: additionalData = [], isLoading: isLoadingAdditional } = useQuery({
-    queryKey: ['additionalData'],
+  // Fetch additional order information
+  const { data: additionalInfo = [], isLoading: isLoadingAdditional } = useQuery({
+    queryKey: ['/api/orders/additional'],
     queryFn: async () => {
       try {
-        return await OrdersAdditionalService.getAllOrdersAdditional();
+        return await OrdersAdditionalService.getOrdersGroupedAdditional();
       } catch (error) {
-        console.error('Failed to fetch additional data:', error);
+        console.error("Failed to fetch additional order info:", error);
         return [];
       }
     }
@@ -648,10 +553,10 @@ export default function HomeDashboard() {
     return {
       total: totalOrdersCount, // Use the total count instead of array length
       inDelivery: orders.filter(order =>
-        order.creationDate && new Date(order.creationDate) > new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+        order.Erstelldatum && new Date(order.Erstelldatum) > new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
       ).length,
       pendingOrders: orders.filter(order =>
-        order.ticketCount > 0
+        order.AnzahlTickets > 0
       ).length
     };
   }, [orders, totalOrdersCount]);
@@ -758,14 +663,14 @@ export default function HomeDashboard() {
                   <div className="flex flex-col p-2 bg-muted/30 rounded-md">
                     <span className="text-xs text-muted-foreground">{t('dashboard.withOrderNumber')}</span>
                     <span className="text-xl font-bold">
-                      {tickets.filter(ticket => ticket.orderNumber).length}
+                      {tickets.filter(ticket => ticket.bestellNr).length}
                     </span>
                   </div>
                   <div className="flex flex-col p-2 bg-muted/30 rounded-md">
                     <span className="text-xs text-muted-foreground">{t('dashboard.recent')}</span>
                     <span className="text-xl font-bold">
                       {tickets.filter(ticket => {
-                        const dateStr = ticket.createdAt;
+                        const dateStr = ticket.entrydate;
                         if (!dateStr) return false;
                         const ticketDate = new Date(dateStr);
                         const oneWeekAgo = new Date();
@@ -806,14 +711,15 @@ export default function HomeDashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="text-3xl font-bold">
-                  {additionalData.filter(info => info.newDeliveryDate).length}
+                  {/* Check both possible property name formats */}
+                  {additionalInfo.filter(info => info.newDeliveryDate || info.NewDeliveryDate).length}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col p-2 bg-muted/30 rounded-md">
                     <span className="text-xs text-muted-foreground">{t('dashboard.thisWeek')}</span>
                     <span className="text-xl font-bold">
-                      {additionalData.filter(info => {
-                        const deliveryDate = info.newDeliveryDate;
+                      {additionalInfo.filter(info => {
+                        const deliveryDate = info.newDeliveryDate || info.NewDeliveryDate;
                         if (!deliveryDate) return false;
 
                         const date = new Date(deliveryDate);
@@ -834,9 +740,9 @@ export default function HomeDashboard() {
                   <div className="flex flex-col p-2 bg-muted/30 rounded-md">
                     <span className="text-xs text-muted-foreground">{t('dashboard.modified')}</span>
                     <span className="text-xl font-bold">
-                      {additionalData.filter(info => {
-                        const newDate = info.newDeliveryDate;
-                        const originalDate = info.originalDeliveryDate;
+                      {additionalInfo.filter(info => {
+                        const newDate = info.newDeliveryDate || info.NewDeliveryDate;
+                        const originalDate = info.originalDeliveryDate || info.OriginalDeliveryDate;
                         return newDate && originalDate && newDate !== originalDate;
                       }).length}
                     </span>
@@ -917,7 +823,7 @@ export default function HomeDashboard() {
           <CardContent>
             <UpcomingDeliveries
               orders={ordersResponse}
-              additionalInfo={additionalData}
+              additionalInfo={additionalInfo}
               isLoading={isLoadingOrders || isLoadingAdditional}
             />
           </CardContent>
@@ -934,19 +840,3 @@ export default function HomeDashboard() {
     </div>
   );
 }
-
-const DeliveryStatusTag = ({ status }: { status: 'upcoming' | 'soon' | 'delayed' }) => {
-  let variant: 'default' | 'outline' | 'secondary' | 'destructive' = 'default';
-  
-  if (status === 'delayed') {
-    variant = 'destructive';
-  } else if (status === 'soon') {
-    variant = 'secondary';
-  }
-  
-  return (
-    <Badge variant={variant}>
-      {status}
-    </Badge>
-  );
-};

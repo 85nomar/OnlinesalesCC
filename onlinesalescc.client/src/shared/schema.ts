@@ -1,10 +1,6 @@
 import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-// Import types from types.ts instead of duplicating
-import type { User as UserType, Ticket as TicketType, OpenOrder as OpenOrderType, 
-  OpenOrderGrouped as OpenOrderGroupedType, OrdersGroupedAdditional as OrdersGroupedAdditionalType, 
-  AlternativeItem as AlternativeItemType } from './types';
 
 // Original user table (keeping as required by the boilerplate)
 export const users = pgTable("users", {
@@ -19,8 +15,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
-// Re-export imported type
-export type User = UserType;
+export type User = typeof users.$inferSelect;
 
 // Ticket table (matches OrderTicket model from C# backend)
 export const tickets = pgTable("tickets", {
@@ -38,8 +33,7 @@ export const insertTicketSchema = createInsertSchema(tickets).omit({
 });
 
 export type InsertTicket = z.infer<typeof insertTicketSchema>;
-// Re-export imported type
-export type Ticket = TicketType;
+export type Ticket = typeof tickets.$inferSelect;
 
 // Open Orders table (matches OpenOrders model from C# backend)
 export const openOrders = pgTable("openOrders", {
@@ -59,8 +53,8 @@ export const insertOpenOrderSchema = createInsertSchema(openOrders).omit({
 });
 
 export type InsertOpenOrder = z.infer<typeof insertOpenOrderSchema>;
-// Re-export imported type
-export type OpenOrder = OpenOrderType;
+// For client compatibility, exclude database ID
+export type OpenOrder = Omit<typeof openOrders.$inferSelect, 'id'>;
 
 // Open Orders Grouped table (matches OpenOrdersGrouped model from C# backend)
 export const openOrdersGrouped = pgTable("openOrdersGrouped", {
@@ -79,15 +73,15 @@ export const insertOpenOrderGroupedSchema = createInsertSchema(openOrdersGrouped
 });
 
 export type InsertOpenOrderGrouped = z.infer<typeof insertOpenOrderGroupedSchema>;
-// Re-export imported type
-export type OpenOrderGrouped = OpenOrderGroupedType;
+// For client compatibility, exclude database ID
+export type OpenOrderGrouped = Omit<typeof openOrdersGrouped.$inferSelect, 'id'>;
 
-// Additional data for grouped orders (matches backend model)
+// Additional data for grouped orders (matching client format)
 export const ordersGroupedAdditional = pgTable("ordersGroupedAdditional", {
   id: serial("id").primaryKey(),
-  ArtikelNr: integer("ArtikelNr").notNull(), // Item number
-  NewDeliveryDate: text("NewDeliveryDate"), // New delivery date (if changed)
-  OriginalDeliveryDate: text("OriginalDeliveryDate"), // Original delivery date
+  ArtikelNr: integer("ArtikelNr").notNull(), // Item number (matching client naming)
+  newDeliveryDate: text("newDeliveryDate"), // New delivery date (if changed)
+  originalDeliveryDate: text("originalDeliveryDate"), // Original delivery date
   notes: text("notes"), // Additional notes for the order
 });
 
@@ -96,10 +90,11 @@ export const insertOrdersGroupedAdditionalSchema = createInsertSchema(ordersGrou
 });
 
 export type InsertOrdersGroupedAdditional = z.infer<typeof insertOrdersGroupedAdditionalSchema>;
-// Re-export imported type
-export type OrdersGroupedAdditional = OrdersGroupedAdditionalType;
+export type OrdersGroupedAdditional = typeof ordersGroupedAdditional.$inferSelect & {
+  alternativeItems?: AlternativeItem[];
+};
 
-// Alternative items table (matches backend model)
+// Alternative items table
 export const alternativeItems = pgTable("alternativeItems", {
   id: serial("id").primaryKey(),
   orderArtikelNr: integer("orderArtikelNr").notNull(), // Original order item number
@@ -112,5 +107,7 @@ export const insertAlternativeItemSchema = createInsertSchema(alternativeItems).
 });
 
 export type InsertAlternativeItem = z.infer<typeof insertAlternativeItemSchema>;
-// Re-export imported type
-export type AlternativeItem = AlternativeItemType;
+export type AlternativeItem = typeof alternativeItems.$inferSelect & {
+  artikelNr: number; // For client compatibility (same as alternativeArtikelNr)
+  artikel: string;  // For client compatibility (same as alternativeArtikel)
+};

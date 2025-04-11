@@ -22,9 +22,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { OrdersAdditionalService } from "@/features/orders";
+import { OrdersAdditionalService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import type { AlternativeItem } from "@/features/orders/types/models";
+import { AlternativeItem } from "@/lib/mockData";
 
 interface AddAlternativeItemModalProps {
   isOpen: boolean;
@@ -47,8 +47,8 @@ export default function AddAlternativeItemModal({
 
   // Create the validation schema with empty messages to avoid duplication
   const validationSchema = z.object({
-    alternativeArtikelNr: z.coerce.number().min(1000, { message: "" }),
-    alternativeArtikel: z.string().min(1, { message: "" })
+    artikelNr: z.coerce.number().min(1000, { message: "" }),
+    artikel: z.string().min(1, { message: "" })
   });
   
   type AlternativeItemFormValues = z.infer<typeof validationSchema>;
@@ -57,14 +57,14 @@ export default function AddAlternativeItemModal({
   const form = useForm<AlternativeItemFormValues>({
     resolver: zodResolver(validationSchema),
     defaultValues: {
-      alternativeArtikelNr: undefined,
-      alternativeArtikel: ""
+      artikelNr: undefined,
+      artikel: ""
     }
   });
 
   // Check if item already exists
   const isAlreadyAdded = (itemNumber: number) => {
-    return currentAlternatives.some(alt => alt.alternativeArtikelNr === itemNumber);
+    return currentAlternatives.some(alt => alt.artikelNr === itemNumber);
   };
 
   // Get query client from React Query
@@ -73,7 +73,7 @@ export default function AddAlternativeItemModal({
   // Handle form submission
   const onSubmit = async (values: AlternativeItemFormValues) => {
     // Check if trying to add the same item as the original
-    if (values.alternativeArtikelNr === artikelNr) {
+    if (values.artikelNr === artikelNr) {
       toast({
         title: t('common.error'),
         description: t('orders.cannotAddSameItem', "Cannot add the same item as an alternative"),
@@ -83,7 +83,7 @@ export default function AddAlternativeItemModal({
     }
     
     // Check if already added
-    if (isAlreadyAdded(values.alternativeArtikelNr)) {
+    if (isAlreadyAdded(values.artikelNr)) {
       toast({
         title: t('common.error'),
         description: t('orders.itemAlreadyAdded', "This item is already added as an alternative"),
@@ -95,14 +95,7 @@ export default function AddAlternativeItemModal({
     setIsSubmitting(true);
     
     try {
-      // Construct the payload to match backend expectations
-      const payload: AlternativeItem = {
-        orderArtikelNr: artikelNr,
-        alternativeArtikelNr: values.alternativeArtikelNr,
-        alternativeArtikel: values.alternativeArtikel
-      };
-      
-      await OrdersAdditionalService.addAlternativeItem(artikelNr, payload);
+      await OrdersAdditionalService.addAlternativeItem(artikelNr, values);
       
       // Invalidate all queries that might use this data
       // Invalidate order details page queries
@@ -117,7 +110,7 @@ export default function AddAlternativeItemModal({
       });
       
       onSuccess();
-      form.reset({ alternativeArtikelNr: undefined, alternativeArtikel: "" });
+      form.reset({ artikelNr: undefined, artikel: "" });
     } catch (error: any) {
       console.error("Error adding alternative item:", error);
       
@@ -138,7 +131,7 @@ export default function AddAlternativeItemModal({
 
   // Handle dialog close
   const handleClose = () => {
-    form.reset({ alternativeArtikelNr: undefined, alternativeArtikel: "" });
+    form.reset({ artikelNr: undefined, artikel: "" });
     onClose();
   };
 
@@ -158,7 +151,7 @@ export default function AddAlternativeItemModal({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
-              name="alternativeArtikelNr"
+              name="artikelNr"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t('orders.alternativeItemNumber', "Alternative Item Number")}</FormLabel>
@@ -178,17 +171,17 @@ export default function AddAlternativeItemModal({
                         if (inputValue && inputValue.length > 0) {
                           const value = parseInt(inputValue);
                           if (value === artikelNr) {
-                            form.setError("alternativeArtikelNr", {
+                            form.setError("artikelNr", {
                               type: "manual",
                               message: t('orders.cannotAddSameItem', "Cannot add the same item as an alternative")
                             });
                           } else if (isAlreadyAdded(value)) {
-                            form.setError("alternativeArtikelNr", {
+                            form.setError("artikelNr", {
                               type: "manual",
                               message: t('orders.itemAlreadyAdded', "This item is already added as an alternative")
                             });
                           } else {
-                            form.clearErrors("alternativeArtikelNr");
+                            form.clearErrors("artikelNr");
                           }
                         }
                       }}
@@ -201,13 +194,13 @@ export default function AddAlternativeItemModal({
             
             <FormField
               control={form.control}
-              name="alternativeArtikel"
+              name="artikel"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t('orders.alternativeItemName', "Alternative Item Name")}</FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder={t('orders.enterItemName', "Enter item name")}
+                    <Input
+                      placeholder={t('orders.enterItemName', "Enter the item name")}
                       autoComplete="off"
                       {...field}
                     />
