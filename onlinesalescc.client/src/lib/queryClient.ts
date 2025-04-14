@@ -1,12 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import {
-    CURRENT_DATA_SOURCE,
-    DataSource,
-    isMockData,
     API_BASE_URL,
-    AUTH_REQUIRED,
-    AUTH_HEADER_NAME,
-    AUTH_TOKEN_PREFIX,
     getApiUrl,
     getAuthToken
 } from '@/config/api.config';
@@ -15,14 +9,6 @@ import {
  * API Configuration Module
  * 
  * This module provides utilities for making API requests.
- * It supports three modes:
- * 1. Internal Mock Mode: Uses the built-in mock data provided by the application
- * 2. External Mock Mode: Uses external mock data through adapter layer
- * 3. Real API Mode: Makes real HTTP requests to the backend
- * 
- * MIGRATION STEP: To migrate to a real API backend:
- * 1. Set CURRENT_DATA_SOURCE to DataSource.REAL_API in '@/config/api.config'
- * 2. Configure API_BASE_URL in '@/config/api.config'
  */
 
 /**
@@ -39,21 +25,12 @@ async function throwIfResNotOk(res: Response) {
  * Makes an API request
  * 
  * This function is used by react-query mutations.
- * For GET requests with mock data, it's bypassed in favor of service functions.
  */
 export async function apiRequest(
     method: string,
     endpoint: string,
     data?: unknown | undefined,
 ): Promise<Response> {
-    // If we're using mock data and this is a GET request, 
-    // we should let the service handle it
-    if (isMockData(CURRENT_DATA_SOURCE) && method.toUpperCase() === 'GET') {
-        console.warn('Using mock data for GET request to', endpoint);
-        // Return mock response that will satisfy throwIfResNotOk
-        return new Response(JSON.stringify({ mock: true }), { status: 200 });
-    }
-
     // Build headers
     const headers: Record<string, string> = {};
 
@@ -62,9 +39,10 @@ export async function apiRequest(
         headers["Content-Type"] = "application/json";
     }
 
-    // Add auth header if required
-    if (AUTH_REQUIRED) {
-        headers[AUTH_HEADER_NAME] = `${AUTH_TOKEN_PREFIX} ${getAuthToken()}`;
+    // Add auth header if authentication is needed
+    const token = getAuthToken();
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
     }
 
     // Build URL
@@ -83,17 +61,11 @@ export async function apiRequest(
 }
 
 /**
- * Query client instance with mock-aware configuration
- * 
- * MIGRATION STEP: When migrating to a real API:
- * 1. Set CURRENT_DATA_SOURCE to DataSource.REAL_API in '@/config/api.config'
- * 2. Configure API_BASE_URL in '@/config/api.config'
+ * Query client instance
  */
 export const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            // No global queryFn when using mock data
-            // When migrating to real API, implement a proper queryFn
             refetchInterval: false,
             refetchOnWindowFocus: false,
             staleTime: Infinity,

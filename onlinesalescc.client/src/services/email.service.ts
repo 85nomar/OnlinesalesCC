@@ -5,7 +5,7 @@
  */
 
 import { apiClient } from './api';
-import { CURRENT_DATA_SOURCE, DataSource, isRealApi } from '@/config/api.config';
+import { API_ENDPOINTS } from '@/config/api.config';
 
 interface SendNotificationParams {
   orderNumbers: number[] | 'all';
@@ -31,22 +31,8 @@ export const EmailService = {
    * @returns Response with success status and message
    */
   async sendNotifications(params: SendNotificationParams): Promise<NotificationResponse> {
-    // For mock data, simulate a successful response
-    if (!isRealApi(CURRENT_DATA_SOURCE)) {
-      const numEmails = params.orderNumbers === 'all' ? 5 : params.orderNumbers.length;
-      
-      // Simulate server delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      return {
-        success: true,
-        message: `Successfully sent ${numEmails} email notifications to customers.`,
-        emailsSent: numEmails
-      };
-    }
-    
-    // For real API, make a POST request to the notifications endpoint
-    const response = await apiClient.post<NotificationResponse>('/api/notifications/email', params);
+    // Make a POST request to the notifications endpoint
+    const response = await apiClient.post<NotificationResponse>(API_ENDPOINTS.NOTIFICATIONS_EMAIL, params);
     return response;
   }
 };

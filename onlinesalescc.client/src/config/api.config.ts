@@ -52,9 +52,18 @@ export const USE_MOCK_DATA = false; // Set to false when migrating
  * API base URL
  * Used when CURRENT_DATA_SOURCE is set to REAL_API
  * 
- * Using environment variable for flexible configuration across environments
+ * Make sure this is a complete URL with protocol and port
+ * Note: The import.meta.env.VITE_API_BASE_URL should NOT include "/api" suffix
+ * as the API endpoints already include it
  */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+export const API_BASE_URL: string = (() => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  // Remove trailing '/api' if present to avoid duplication
+  if (envUrl && envUrl.endsWith('/api')) {
+    return envUrl.slice(0, -4); // Remove '/api' suffix
+  }
+  return envUrl || "http://localhost:7265";
+})();
 
 /**
  * API version
@@ -91,9 +100,6 @@ export const API_ENDPOINTS = {
   // Tickets
   TICKETS: "/api/tickets",
   TICKET: (id: string) => `/api/tickets/${id}`,
-
-  // Notifications
-  NOTIFICATIONS_EMAIL: "/api/notifications/email",
 };
 
 /**
@@ -103,14 +109,15 @@ export const API_ENDPOINTS = {
  * @returns Full URL including base and version or local path for internal API
  */
 export function getApiUrl(endpoint: string): string {
-  // If no API base URL is defined, use local endpoint
-  if (!API_BASE_URL) {
-    return endpoint;
+  // If using the real API, always use the complete URL
+  if (isRealApi(CURRENT_DATA_SOURCE)) {
+    // Ensure the endpoint starts with a slash if needed
+    const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    return `${API_BASE_URL}${formattedEndpoint}`;
   }
 
-  // For C# backend, we don't need to include the API_VERSION
-  // Just combine the base URL with the endpoint
-  return `${API_BASE_URL}${endpoint}`;
+  // For mock data, return local endpoint
+  return endpoint;
 }
 
 /**
@@ -129,4 +136,21 @@ export function getAuthToken(): string {
  */
 export function setAuthToken(token: string): void {
   localStorage.setItem("auth_token", token);
+}
+
+/**
+ * Add authentication headers to a fetch request if needed
+ * This is a helper for development environments where authentication might be disabled
+ * 
+ * @param headers Current headers object to modify
+ */
+export function addAuthHeadersIfNeeded(headers: HeadersInit): HeadersInit {
+  const newHeaders = { ...headers };
+
+  // Only add auth headers if authentication is required
+  if (AUTH_REQUIRED && getAuthToken()) {
+    newHeaders[AUTH_HEADER_NAME] = `${AUTH_TOKEN_PREFIX} ${getAuthToken()}`;
+  }
+
+  return newHeaders;
 }

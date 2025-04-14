@@ -1166,6 +1166,10 @@ body {
   max-height: 200px;
 }
 
+.max-h-\[280px\] {
+  max-height: 280px;
+}
+
 .max-h-\[300px\] {
   max-height: 300px;
 }
@@ -1968,6 +1972,11 @@ body {
 .bg-yellow-100 {
   --tw-bg-opacity: 1;
   background-color: rgb(254 249 195 / var(--tw-bg-opacity, 1));
+}
+
+.bg-yellow-50 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 252 232 / var(--tw-bg-opacity, 1));
 }
 
 .fill-current {

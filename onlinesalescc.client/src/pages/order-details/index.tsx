@@ -17,7 +17,8 @@ import EditDeliveryDateModal from "./EditDeliveryDateModal";
 import AddAlternativeItemModal from "./AddAlternativeItemModal";
 import AddTicketModal from "@/components/tickets/AddTicketModal";
 import OrderTicketsModal from "../open-orders/OrderTicketsModal";
-import { productGroups, OpenOrders } from "@/lib/mockData";
+import { OpenOrder, AlternativeItem } from "@/shared/types";
+import { productGroups } from "@/services/productGroups";
 
 export default function OrderDetailsPage() {
   const [, params] = useRoute("/order-details/:artikelNr");
@@ -88,14 +89,22 @@ export default function OrderDetailsPage() {
     }
   });
 
-  // Fetch additional data for this item number
+  // Fetch additional info for this item
   const { data: additionalInfo, refetch: refetchAdditional } = useQuery({
     queryKey: [`/api/orders/additional/${artikelNr}`],
     queryFn: async () => {
       try {
-        return await OrdersAdditionalService.getOrderAdditionalByArtikelNr(artikelNr);
+        const data = await OrdersAdditionalService.getOrderAdditionalByArtikelNr(artikelNr);
+        console.log(`Fetched additional data for artikelNr=${artikelNr}:`, data);
+
+        // Ensure alternativeItems is always an array
+        if (data && !data.alternativeItems) {
+          data.alternativeItems = [];
+        }
+
+        return data;
       } catch (error) {
-        console.error("Failed to fetch additional info:", error);
+        console.error("Failed to fetch additional data:", error);
         toast({
           title: "Error",
           description: "Failed to load delivery dates and alternatives. Please try again.",
@@ -105,6 +114,18 @@ export default function OrderDetailsPage() {
       }
     }
   });
+
+  // Debug additionalInfo structure
+  useEffect(() => {
+    if (additionalInfo) {
+      console.log("Current additionalInfo state:", {
+        hasData: !!additionalInfo,
+        hasAlternativeItems: !!additionalInfo.alternativeItems,
+        alternativeItemsCount: additionalInfo.alternativeItems?.length || 0,
+        newDeliveryDate: additionalInfo.newDeliveryDate || 'null'
+      });
+    }
+  }, [additionalInfo]);
 
   // Fetch tickets for this item number
   const { data: tickets = [], refetch: refetchTickets } = useQuery({
@@ -198,7 +219,7 @@ export default function OrderDetailsPage() {
   const columns = [
     {
       header: t('orders.orderNumber'),
-      accessor: (row: OpenOrders) => row.BestellNr,
+      accessor: (row: OpenOrder) => row.BestellNr,
       cell: (value: number) => (
         <span className="font-mono">{value}</span>
       ),
@@ -206,18 +227,18 @@ export default function OrderDetailsPage() {
     },
     {
       header: t('orders.creationDate'),
-      accessor: (row: OpenOrders) => row.Erstelldatum,
+      accessor: (row: OpenOrder) => row.Erstelldatum,
       cell: (value: string) => <DateFormatter date={value} withTime={true} />,
       sortable: true
     },
     {
       header: t('orders.quantity'),
-      accessor: (row: OpenOrders) => row.Anzahl,
+      accessor: (row: OpenOrder) => row.Anzahl,
       sortable: true
     },
     {
       header: t('common.tickets'),
-      accessor: (row: OpenOrders) => {
+      accessor: (row: OpenOrder) => {
         // Check if there are tickets for this order
         const orderTickets = tickets.filter(ticket =>
           ticket.bestellNr && ticket.bestellNr.toString() === row.BestellNr.toString()
@@ -254,7 +275,7 @@ export default function OrderDetailsPage() {
     },
     {
       header: t('orders.status'),
-      accessor: (row: OpenOrders) => row.BestellStatus,
+      accessor: (row: OpenOrder) => row.BestellStatus,
       cell: (value: string) => {
         if (!value || value === '0' || value === '') {
           return <Badge variant="awaiting">{t('statusLabels.unknown', 'Status Unknown')}</Badge>;
@@ -430,18 +451,26 @@ export default function OrderDetailsPage() {
             </div>
 
             <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+              {/* Debug info on alternative items */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="text-xs p-1 bg-yellow-50 text-yellow-800 rounded mb-1 hidden">
+                  Items: {additionalInfo?.alternativeItems ? additionalInfo.alternativeItems.length : 'none'}
+                </div>
+              )}
+
+              {/* Check if additionalInfo exists and has alternativeItems */}
               {additionalInfo?.alternativeItems && additionalInfo.alternativeItems.length > 0 ? (
-                additionalInfo.alternativeItems.map(item => (
+                additionalInfo.alternativeItems.map((item: AlternativeItem) => (
                   <div
-                    key={item.artikelNr}
+                    key={item.artikelNr || item.alternativeArtikelNr}
                     className="py-1 px-2 bg-muted/30 rounded flex items-center justify-between"
                   >
                     <div className="truncate mr-2">
-                      <span className="text-xs text-foreground">{item.artikel}</span>
-                      <span className="ml-1 text-xs text-muted-foreground font-mono">#{item.artikelNr}</span>
+                      <span className="text-xs text-foreground">{item.artikel || item.alternativeArtikel}</span>
+                      <span className="ml-1 text-xs text-muted-foreground font-mono">#{item.artikelNr || item.alternativeArtikelNr}</span>
                     </div>
                     <ActionIcon
-                      onClick={() => handleRemoveAlternative(item.artikelNr)}
+                      onClick={() => handleRemoveAlternative(item.alternativeArtikelNr || item.artikelNr || 0)}
                       icon={<TrashIcon />}
                       title={t('orders.removeAlternativeItem')}
                       size="sm"
@@ -511,6 +540,10 @@ export default function OrderDetailsPage() {
         isOpen={isAlternativeModalOpen}
         onClose={() => setIsAlternativeModalOpen(false)}
         onSuccess={() => {
+          console.log("Alternative item added successfully, refetching data...");
+          // Force refetch the additional data for this article
+          queryClient.invalidateQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
+          queryClient.refetchQueries({ queryKey: [`/api/orders/additional/${artikelNr}`] });
           refetchAdditional();
           setIsAlternativeModalOpen(false);
         }}

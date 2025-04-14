@@ -6,7 +6,11 @@
 
 import { apiClient, debounceRequest, isValidNumberSearch } from './api';
 import { API_ENDPOINTS } from '@/config/api.config';
-import { OpenOrders, OpenOrdersGrouped, OrdersGroupedAdditional, AlternativeItem } from '@/lib/mockData';
+import { OpenOrder, OpenOrderGrouped, OrdersGroupedAdditional, AlternativeItem } from '@/shared/types';
+
+// Type aliases for backward compatibility
+export type OpenOrders = OpenOrder;
+export type OpenOrdersGrouped = OpenOrderGrouped;
 
 // Order cache storage
 // A simple in-memory cache to store orders by lookup key
@@ -681,14 +685,19 @@ export const OrdersAdditionalService = {
    * @returns Promise indicating success
    */
   async addAlternativeItem(artikelNr: number, item: AlternativeItem): Promise<void> {
+    // Make sure we have the correct properties for the API
+    const payload = {
+      ArtikelNr: item.artikelNr || item.alternativeArtikelNr,
+      Artikel: item.artikel || item.alternativeArtikel
+    };
+
+    console.log(`Sending alternative item to API for artikelNr=${artikelNr}:`, payload);
+
     // Use the specific endpoint for adding an alternative item
     // The server will handle creating the entry if it doesn't exist
     await apiClient.post<void>(
       `${API_ENDPOINTS.ORDER_ADDITIONAL(artikelNr.toString())}/alternatives`,
-      {
-        artikelNr: item.artikelNr,
-        artikel: item.artikel
-      }
+      payload
     );
   },
 
